@@ -4,8 +4,7 @@ import TerminalPane from './TerminalPane'
 import KodexCodeField from './KodexCodeField'
 import { type PluginAppearance } from './PluginAgentSurface'
 import ProviderBrandMark from './ProviderBrandMark'
-import ProjectCreator from './ProjectCreator'
-import VisualDesigner, { type DesignerDocument, type DesignerMode, type DesignerNode } from './VisualDesigner'
+import WelcomeScreen from './WelcomeScreen'
 
 type Health = { status: string; service: string; version: string }
 type Memory = { id: number; kind: string; title: string; content: string; created_at: string }
@@ -102,7 +101,7 @@ type ConversationSummary = {
   created_at?: string
   updated_at?: string
 }
-type Panel = 'explorer' | 'designer' | 'search' | 'outline' | 'git' | 'run' | 'history' | 'memory' | 'tasks' | 'plugins'
+type Panel = 'explorer' | 'search' | 'outline' | 'git' | 'run' | 'history' | 'memory' | 'tasks' | 'plugins'
 type IconName = Panel | 'plus' | 'sparkles' | 'arrow-up' | 'stop' | 'paperclip' | 'folder' | 'file' | 'terminal' | 'check' | 'info' | 'context' | 'target' | 'open-files' | 'permission' | 'model' | 'chevron' | 'clean' | 'trash'
 type Workspace = { path: string; name: string }
 type CoreEvent = {
@@ -389,7 +388,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 const icons: Record<Panel, IconName> = {
   explorer: 'explorer',
-  designer: 'designer',
   search: 'search',
   outline: 'outline',
   git: 'git',
@@ -402,7 +400,6 @@ const icons: Record<Panel, IconName> = {
 
 const panelLabels: Record<Panel, string> = {
   explorer: 'Explorer',
-  designer: 'Designer',
   search: 'Search',
   outline: 'Outline',
   git: 'Source Control',
@@ -412,11 +409,7 @@ const panelLabels: Record<Panel, string> = {
   tasks: 'Tasks',
   plugins: 'Plugins',
 }
-const primaryPanels: Panel[] = ['explorer', 'designer', 'search', 'git', 'run', 'plugins']
-
-function supportsDesigner(path: string) {
-  return /\.(tsx|jsx|html?|dart|xaml|kts?|swift)$/i.test(path)
-}
+const primaryPanels: Panel[] = ['explorer', 'search', 'git', 'run', 'plugins']
 
 function fileGlyph(entry: FileEntry) {
   if (entry.kind === 'directory') return '▱'
@@ -875,12 +868,6 @@ function App() {
   const [plugins, setPlugins] = useState<DesktopPlugin[]>([])
   const [installingPlugin, setInstallingPlugin] = useState<string | null>(null)
   const [agentTab, setAgentTab] = useState<AgentSurfaceId>('kodex')
-  const [designerPath, setDesignerPath] = useState<string | null>(null)
-  const [designerMode, setDesignerMode] = useState<DesignerMode>('design')
-  const [designerDocument, setDesignerDocument] = useState<DesignerDocument | null>(null)
-  const [designerSelectedNode, setDesignerSelectedNode] = useState<DesignerNode | null>(null)
-  const [designerProject, setDesignerProject] = useState<{ source_files: string[]; adapters: Array<{ id: string; name: string; tier: string }> } | null>(null)
-  const [projectCreatorOpen, setProjectCreatorOpen] = useState(false)
   const themeMigrationPendingRef = useRef(localStorage.getItem(themeMigrationKey) !== 'done')
   const [theme, setTheme] = useState<ThemeId>(() => {
     const saved = localStorage.getItem('codex.theme') as ThemeId | null
@@ -928,7 +915,6 @@ function App() {
   agentTabRef.current = agentTab
 
   const selectedFile = openFiles.find((file) => file.path === activeFile) ?? null
-  const designerActive = Boolean(selectedFile && designerPath === selectedFile.path && supportsDesigner(selectedFile.path))
   const outlineItems = fileOutline(selectedFile)
   const running = processes.filter((process) => process.status === 'running')
   const agentActive = Boolean(currentRun && activeRunStatuses.has(currentRun.status))
@@ -1414,14 +1400,6 @@ function App() {
     setPlugins(items)
   }
 
-  async function refreshDesignerProject() {
-    try {
-      setDesignerProject(await request('/v1/designer/project'))
-    } catch {
-      setDesignerProject(null)
-    }
-  }
-
   async function installPlugin(pluginId: string) {
     if (!window.codex) return
     setInstallingPlugin(pluginId)
@@ -1505,6 +1483,33 @@ function App() {
     }
   }
 
+  async function createCodingWorkspace(focusAgent = false) {
+    if (!window.codex) {
+      setError('Native workspace creation is available only inside Electron')
+      return
+    }
+    try {
+      if (focusAgent) localStorage.setItem('kodex.focus-agent-after-workspace', 'true')
+      const created = await window.codex.createCodingWorkspace()
+      if (!created && focusAgent) localStorage.removeItem('kodex.focus-agent-after-workspace')
+    } catch (reason) {
+      if (focusAgent) localStorage.removeItem('kodex.focus-agent-after-workspace')
+      setError(reason instanceof Error ? reason.message : 'Unable to create coding workspace')
+    }
+  }
+
+  async function startUntitledFile() {
+    if (!window.codex) {
+      setError('Native file creation is available only inside Electron')
+      return
+    }
+    try {
+      await window.codex.startUntitledWorkspace()
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to start a new file')
+    }
+  }
+
   async function openRecentWorkspace(path: string) {
     if (!window.codex) return
     try {
@@ -1574,33 +1579,6 @@ function App() {
       ])
     }
     setActiveFile(entry.path)
-  }
-
-  async function openDesigner(path: string) {
-    await openEntry({ name: path.split('/').at(-1) ?? path, kind: 'file', path })
-    setDesignerPath(path)
-    setDesignerMode('design')
-    setActivePanel('designer')
-  }
-
-  async function openDesignerSource(node: DesignerNode) {
-    await openEntry({ name: node.source.path.split('/').at(-1) ?? node.source.path, kind: 'file', path: node.source.path })
-    setDesignerMode('source')
-    window.setTimeout(() => {
-      const editor = editorRef.current
-      if (!editor) return
-      editor.revealLineInCenter(node.source.start_line)
-      editor.setPosition({ lineNumber: node.source.start_line, column: node.source.start_column })
-      editor.focus()
-    }, 50)
-  }
-
-  function askDesignerAI(node: DesignerNode | null) {
-    setDesignerSelectedNode(node)
-    setChatInput(node
-      ? `Update the selected ${node.type} in ${node.source.path} at line ${node.source.start_line}. Show me the source and visual diff before applying the change: `
-      : `Update the design in ${designerPath}. Show me the source and visual diff before applying the change: `)
-    chatInputRef.current?.focus()
   }
 
   function highlightAgentEdit(edit: ActiveAgentEdit) {
@@ -2003,22 +1981,6 @@ function App() {
           git: includeIdeContext ? gitState : null,
           project_intelligence: includeIdeContext ? projectIntelligence : null,
           run_profiles: includeIdeContext ? runProfiles : [],
-          designer: designerDocument ? {
-            mode: designerMode,
-            path: designerDocument.path,
-            adapter: designerDocument.adapter,
-            device_preview: 'responsive',
-            selected_node: designerSelectedNode,
-            hierarchy: designerDocument.nodes.map((node) => ({
-              id: node.id,
-              type: node.type,
-              name: node.name,
-              parent_id: node.parent_id,
-              source: node.source,
-              properties: node.properties,
-            })),
-            workflow: 'preview_then_apply',
-          } : null,
           unsaved_files: includeIdeContext
             ? openFiles.filter((file) => file.content !== file.savedContent).map((file) => file.path)
             : [],
@@ -2330,18 +2292,21 @@ function App() {
   }, [selectedFile])
 
   useEffect(() => {
+    if (!workspace || localStorage.getItem('kodex.focus-agent-after-workspace') !== 'true') return
+    localStorage.removeItem('kodex.focus-agent-after-workspace')
+    window.setTimeout(() => chatInputRef.current?.focus(), 250)
+  }, [workspace?.path])
+
+  useEffect(() => {
     const dispose = window.codex?.onMenuCommand((command) => {
-      if (command === 'new-project') {
-        setProjectCreatorOpen(true)
+      if (command === 'new-workspace') {
+        void createCodingWorkspace()
       } else if (command === 'open-folder') {
         void openWorkspace()
       } else if (command === 'save' || command === 'save-all') {
         void saveActiveFile()
       } else if (command === 'command-palette') {
         setCommandPaletteOpen(true)
-      } else if (command === 'show-designer') {
-        setActivePanel('designer')
-        if (selectedFile && supportsDesigner(selectedFile.path)) void openDesigner(selectedFile.path)
       } else if (command === 'show-explorer') {
         setActivePanel('explorer')
       } else if (command === 'toggle-terminal' || command === 'new-terminal') {
@@ -2358,10 +2323,6 @@ function App() {
     return dispose
   }, [selectedFile, runProfiles])
 
-  useEffect(() => {
-    if (activePanel === 'designer') void refreshDesignerProject()
-  }, [activePanel])
-
   if (!workspace) {
     return (
       <div className="ide welcome-only" data-theme={theme}>
@@ -2374,32 +2335,24 @@ function App() {
           <div className="command-center welcome-command">Select a folder to begin</div>
           <div className="window-actions"><span>◫</span><span>◧</span><span>□</span></div>
         </header>
-        <ProjectCreator recentWorkspaces={recentWorkspaces} onOpenWorkspace={() => void openWorkspace()} onOpenRecent={(path) => void openRecentWorkspace(path)} />
+        <WelcomeScreen
+          recentWorkspaces={recentWorkspaces}
+          onCreateWorkspace={() => void createCodingWorkspace()}
+          onNewFile={() => void startUntitledFile()}
+          onOpenWorkspace={() => void openWorkspace()}
+          onOpenRecent={(path) => void openRecentWorkspace(path)}
+          onAskKodex={() => void createCodingWorkspace(true)}
+          onOpenDocs={() => void window.codex?.openExternal('https://github.com/fireyhellmarketing-cmd/kodex')}
+        />
         {error && <div className="error-toast" onClick={() => setError(null)}>{error}</div>}
       </div>
     )
   }
 
-  if (projectCreatorOpen) {
-    return (
-      <div className="ide welcome-only" data-theme={theme}>
-        <header className="titlebar">
-          <div className="titlebar-brand"><KodexLogo size="small" /><span>Kodex</span></div>
-          <div className="command-center welcome-command">Create a new project</div>
-          <button className="project-creator-close" onClick={() => setProjectCreatorOpen(false)}>Back to workspace</button>
-        </header>
-        <ProjectCreator recentWorkspaces={recentWorkspaces} onOpenWorkspace={() => void openWorkspace()} onOpenRecent={(path) => void openRecentWorkspace(path)} />
-      </div>
-    )
-  }
-
   const commands = [
+    { label: 'Files: New Coding Workspace', detail: 'Open an empty folder for a new project', run: createCodingWorkspace },
     { label: 'Files: Open Folder', detail: 'Choose a workspace', run: openWorkspace },
     { label: 'View: Explorer', detail: 'Show workspace files', run: () => setActivePanel('explorer') },
-    { label: 'View: Designer', detail: 'Open the visual app designer', run: () => {
-      setActivePanel('designer')
-      if (selectedFile && supportsDesigner(selectedFile.path)) void openDesigner(selectedFile.path)
-    } },
     { label: 'View: Search', detail: 'Search files and symbols', run: () => setActivePanel('search') },
     { label: 'View: Outline', detail: 'Show symbols in the active file', run: () => setActivePanel('outline') },
     { label: 'View: Timeline', detail: 'Show agent work and workspace snapshots', run: () => setActivePanel('history') },
@@ -2435,9 +2388,6 @@ function App() {
             <button
               className="file-open"
               onClick={() => void openEntry(entry)}
-              onDoubleClick={() => {
-                if (entry.kind === 'file' && supportsDesigner(entry.path)) void openDesigner(entry.path)
-              }}
               title={entry.path}
             >
               <span className={`tree-chevron ${entry.kind === 'file' ? 'hidden' : ''} ${expanded ? 'expanded' : ''}`}>
@@ -2464,31 +2414,6 @@ function App() {
   }
 
   function renderSidePanel() {
-    if (activePanel === 'designer') {
-      return (
-        <>
-          <PanelHeader title="Designer" meta={`${designerProject?.source_files.length ?? 0}`} />
-          <div className="designer-side-panel">
-            <div className="plugins-panel-heading">
-              <span>Visual documents</span>
-              <button onClick={() => void refreshDesignerProject()}>Refresh</button>
-            </div>
-            <div className="designer-adapter-list">
-              {designerProject?.adapters.map((adapter) => (
-                <span key={adapter.id}><strong>{adapter.name}</strong><small>{adapter.tier} adapter</small></span>
-              ))}
-            </div>
-            {designerProject?.source_files.map((path) => (
-              <button className={designerPath === path ? 'active' : ''} key={path} onClick={() => void openDesigner(path)}>
-                <span className="file-icon file">UI</span>
-                <span><strong>{path.split('/').at(-1)}</strong><small>{path}</small></span>
-              </button>
-            ))}
-            {!designerProject?.source_files.length && <Empty label="Open a supported React, Flutter, XAML, Compose, SwiftUI, or HTML file to design it." />}
-          </div>
-        </>
-      )
-    }
     if (activePanel === 'plugins') {
       return (
         <>
@@ -3341,32 +3266,11 @@ function App() {
               </div>
             ) : selectedFile ? (
               <>
-                {designerActive && designerMode !== 'source' ? (
-                  <VisualDesigner
-                    path={selectedFile.path}
-                    source={selectedFile.content}
-                    mode={designerMode}
-                    request={request}
-                    onModeChange={setDesignerMode}
-                    onOpenSource={(node) => void openDesignerSource(node)}
-                    onAskAI={askDesignerAI}
-                    onDocumentChange={(document) => {
-                      setDesignerDocument(document)
-                      void request<FilePayload>(`/v1/file?path=${encodeURIComponent(document.path)}`).then((payload) => {
-                        setOpenFiles((current) => current.map((file) => file.path === payload.path ? { ...file, content: payload.content, savedContent: payload.content } : file))
-                      })
-                    }}
-                  />
-                ) : (
-                  <>
-                    <div className="editor-breadcrumb">
-                      <span>{selectedFile.path.split('/').join('  ›  ')}</span>
-                      {supportsDesigner(selectedFile.path) && (
-                        <button className="open-designer-button" onClick={() => void openDesigner(selectedFile.path)}>Open Designer</button>
-                      )}
-                    </div>
-                    <div className="code-editor">
-                      <Editor
+                <div className="editor-breadcrumb">
+                  <span>{selectedFile.path.split('/').join('  ›  ')}</span>
+                </div>
+                <div className="code-editor">
+                  <Editor
                     beforeMount={configureMonaco}
                     onMount={mountEditor}
                     theme={`codex-${theme}`}
@@ -3396,10 +3300,8 @@ function App() {
                       tabSize: 2,
                       wordWrap: 'off',
                     }}
-                      />
-                    </div>
-                  </>
-                )}
+                  />
+                </div>
               </>
             ) : (
               selectedSnapshot ? (
@@ -3968,6 +3870,18 @@ function App() {
                 ))}
               </div>
             )}
+            {includeIdeContext && (
+              <div className="agent-context-summary" aria-label="Included IDE context">
+                <span><b>Context</b></span>
+                <span title={activeFile || 'No active file'}>{activeFile ? activeFile.split('/').at(-1) : 'No active file'}</span>
+                <span>{openFiles.length} open</span>
+                <span>{openFiles.filter((file) => file.content !== file.savedContent).length} unsaved</span>
+                <span>{gitState?.branch || 'No Git branch'}</span>
+                <span>{running.length} processes</span>
+                <span>{runProfiles.length} run profiles</span>
+                <span className={health ? 'ready' : 'warning'}>{health ? 'Core ready' : 'Core offline'}</span>
+              </div>
+            )}
             <textarea
               ref={chatInputRef}
               rows={2}
@@ -4224,10 +4138,10 @@ function KodexBootSequence({ onComplete }: { onComplete: () => void }) {
 
 const kodexAgentShortcuts = [
   { command: '/build', label: 'Build', prompt: 'Build a complete, production-ready feature for: ', icon: 'run' as IconName },
-  { command: '/fix', label: 'Fix', prompt: 'Inspect the workspace, diagnose, and fix: ', icon: 'clean' as IconName },
+  { command: '/debug', label: 'Debug', prompt: 'Reproduce, diagnose, and fix this issue, then verify the result: ', icon: 'clean' as IconName },
   { command: '/explain', label: 'Explain', prompt: 'Explain this clearly using the current workspace context: ', icon: 'info' as IconName },
-  { command: '/refactor', label: 'Refactor', prompt: 'Refactor this safely while preserving behavior: ', icon: 'sparkles' as IconName },
   { command: '/test', label: 'Test', prompt: 'Add and run focused tests for: ', icon: 'check' as IconName },
+  { command: '/review', label: 'Review', prompt: 'Review the current changes for bugs, regressions, risks, and missing tests: ', icon: 'search' as IconName },
 ]
 
 function KodexAgentCore({
@@ -4335,7 +4249,6 @@ function CompactSwitch({
 function Icon({ name }: { name: IconName }) {
   const paths: Record<IconName, ReactNode> = {
     explorer: <><path d="M3.5 5.5h6l1.7 2H20.5v10.5H3.5z" /><path d="M3.5 8h17" /></>,
-    designer: <><rect x="3.5" y="4" width="17" height="16" rx="2" /><path d="M7 8h10M7 12h4v4H7zM14 12h3v4h-3z" /></>,
     search: <><circle cx="10.5" cy="10.5" r="6" /><path d="m15 15 5 5" /></>,
     outline: <><path d="M5 5h5M5 12h8M5 19h5" /><path d="m15 5 2-2 2 2-2 2zM15 17h4v4h-4z" /></>,
     git: <><circle cx="6" cy="5" r="2" /><circle cx="18" cy="7" r="2" /><circle cx="8" cy="19" r="2" /><path d="M6 7v5a7 7 0 0 0 7 7h3M8 5h5a5 5 0 0 1 5 5v5" /></>,

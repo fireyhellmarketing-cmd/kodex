@@ -16,9 +16,6 @@
     "label": "ChatGPT Codex",
     "order": 10
   },
-  "designerAdapters": ["react", "electron"],
-  "toolboxContributions": [],
-  "projectTemplates": ["react-web", "electron"],
   "interface": {
     "displayName": "OpenAI Codex for Kodex",
     "shortDescription": "Operate and repair the Kodex desktop coding agent.",

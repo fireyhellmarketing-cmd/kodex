@@ -61,6 +61,7 @@ interface Window {
     currentWorkspace: () => Promise<CodexWorkspace | null>
     recentWorkspaces: () => Promise<CodexWorkspace[]>
     startUntitledWorkspace: () => Promise<CodexWorkspace>
+    createCodingWorkspace: () => Promise<CodexWorkspace | null>
     openWorkspace: () => Promise<CodexWorkspace | null>
     openRecentWorkspace: (workspace: string) => Promise<CodexWorkspace>
     chooseWorkspaceFiles: () => Promise<Array<{
@@ -71,10 +72,6 @@ interface Window {
       content: string
       dataUrl: string
     }>>
-    chooseProjectParent: () => Promise<string | null>
-    projectCreationState: () => Promise<Record<string, unknown> | null>
-    createProject: (options: Record<string, unknown>) => Promise<CodexWorkspace>
-    onProjectProgress: (listener: (payload: Record<string, unknown>) => void) => () => void
     restartCore: () => Promise<{ restarted: boolean; owned: boolean }>
     coreDiagnostics: () => Promise<Record<string, unknown>>
     getSettings: () => Promise<CodexDesktopSettings>
@@ -89,7 +86,6 @@ interface Window {
     installPlugin: (pluginId: string) => Promise<CodexPlugin>
     setPluginEnabled: (pluginId: string, enabled: boolean) => Promise<CodexPlugin>
     uninstallPlugin: (pluginId: string) => Promise<{ id: string; deleted: boolean }>
-    discoverDesignerDevices: () => Promise<Array<{ runtime: string; available: boolean; output: string }>>
     onMenuCommand: (listener: (command: string) => void) => () => void
     openExternal: (url: string) => Promise<void>
     checkForUpdates: () => Promise<{ configured: boolean }>

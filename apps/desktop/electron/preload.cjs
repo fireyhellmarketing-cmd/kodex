@@ -7,17 +7,10 @@ contextBridge.exposeInMainWorld('codex', {
   currentWorkspace: () => ipcRenderer.invoke('workspace:current'),
   recentWorkspaces: () => ipcRenderer.invoke('workspace:recent'),
   startUntitledWorkspace: () => ipcRenderer.invoke('workspace:new-file'),
+  createCodingWorkspace: () => ipcRenderer.invoke('workspace:create'),
   openWorkspace: () => ipcRenderer.invoke('workspace:open-dialog'),
   openRecentWorkspace: (workspace) => ipcRenderer.invoke('workspace:open-recent', workspace),
   chooseWorkspaceFiles: () => ipcRenderer.invoke('workspace:choose-files'),
-  chooseProjectParent: () => ipcRenderer.invoke('project:choose-parent'),
-  projectCreationState: () => ipcRenderer.invoke('project:creation-state'),
-  createProject: (options) => ipcRenderer.invoke('project:create', options),
-  onProjectProgress: (listener) => {
-    const handler = (_event, payload) => listener(payload)
-    ipcRenderer.on('project:progress', handler)
-    return () => ipcRenderer.removeListener('project:progress', handler)
-  },
   restartCore: () => ipcRenderer.invoke('core:restart'),
   coreDiagnostics: () => ipcRenderer.invoke('core:diagnostics'),
   getSettings: () => ipcRenderer.invoke('settings:get'),
@@ -32,7 +25,6 @@ contextBridge.exposeInMainWorld('codex', {
   installPlugin: (pluginId) => ipcRenderer.invoke('plugins:install', pluginId),
   setPluginEnabled: (pluginId, enabled) => ipcRenderer.invoke('plugins:set-enabled', pluginId, enabled),
   uninstallPlugin: (pluginId) => ipcRenderer.invoke('plugins:uninstall', pluginId),
-  discoverDesignerDevices: () => ipcRenderer.invoke('designer:devices'),
   onMenuCommand: (listener) => {
     const handler = (_event, command) => listener(command)
     ipcRenderer.on('menu:command', handler)

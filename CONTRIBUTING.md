@@ -1,8 +1,8 @@
 # Contributing to Kodex
 
 Thank you for helping improve Kodex. Contributions may include bug fixes, tests, documentation,
-AI provider integrations, visual designer adapters, project templates, accessibility work, and
-platform packaging improvements.
+AI provider integrations, editor and agent improvements, accessibility work, and platform
+packaging improvements.
 
 ## Development Setup
 

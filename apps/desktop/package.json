@@ -2,7 +2,7 @@
   "name": "kodex-desktop",
   "private": true,
   "version": "0.1.0",
-  "description": "Open-source, local-first AI IDE and visual application studio",
+  "description": "Open-source, local-first AI coding IDE with an autonomous Kodex agent",
   "author": "Aayush Datta",
   "license": "MIT",
   "homepage": "https://github.com/fireyhellmarketing-cmd/kodex",

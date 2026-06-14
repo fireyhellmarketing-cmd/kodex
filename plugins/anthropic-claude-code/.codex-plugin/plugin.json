@@ -15,9 +15,6 @@
     "label": "Claude",
     "order": 20
   },
-  "designerAdapters": [],
-  "toolboxContributions": [],
-  "projectTemplates": [],
   "interface": {
     "displayName": "Claude Code for Kodex",
     "shortDescription": "Use Claude Code with Kodex workspace tools.",

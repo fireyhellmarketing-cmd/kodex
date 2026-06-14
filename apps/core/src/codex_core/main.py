@@ -34,7 +34,6 @@ from .project_intelligence import (
     update_project_state,
 )
 from .platform_services import PlatformServices
-from .designer import DEVICE_PROFILES, PROJECT_TEMPLATES, DesignerService
 from .excellence import (
     compare_trajectories,
     read_workspace_session,
@@ -619,17 +618,6 @@ class DatabaseRestoreRequest(BaseModel):
     path: str
 
 
-class DesignerTransactionRequest(BaseModel):
-    path: str
-    operation: str = Field(pattern="^(add|update|delete)$")
-    node_id: str = ""
-    component: str = ""
-    property: str = ""
-    value: str = ""
-    label: str = ""
-    expected_hash: str = ""
-
-
 def row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
     return dict(row)
 
@@ -1083,7 +1071,6 @@ agent_runtime = AgentRuntime(
     create_workspace_snapshot,
 )
 platform_services = PlatformServices(DEFAULT_WORKSPACE, db_path, emit_event)
-designer_service = DesignerService(DEFAULT_WORKSPACE, emit_event)
 
 
 def add_process_log(proc_id: int, stream: str, line: str) -> None:
@@ -2059,73 +2046,6 @@ def read_file(path: str) -> dict[str, Any]:
     except UnicodeDecodeError as error:
         raise HTTPException(status_code=415, detail="File is not UTF-8 text") from error
     return {"path": relative_workspace_path(root), "content": content}
-
-
-@app.get("/v1/designer/project")
-def designer_project() -> dict[str, Any]:
-    return designer_service.detect_project()
-
-
-@app.get("/v1/designer/document")
-def designer_document(path: str) -> dict[str, Any]:
-    try:
-        return designer_service.parse_document(path)
-    except FileNotFoundError as error:
-        raise HTTPException(status_code=404, detail="Designer source file not found") from error
-    except (OSError, UnicodeDecodeError, ValueError) as error:
-        raise HTTPException(status_code=422, detail=str(error)) from error
-
-
-@app.get("/v1/designer/toolbox")
-def designer_toolbox(adapter: str = "") -> list[dict[str, Any]]:
-    return designer_service.toolbox(adapter)
-
-
-@app.get("/v1/designer/device-profiles")
-def designer_device_profiles() -> list[dict[str, Any]]:
-    return DEVICE_PROFILES
-
-
-@app.get("/v1/designer/history")
-def designer_history() -> dict[str, Any]:
-    return designer_service.history()
-
-
-@app.post("/v1/designer/transactions")
-def designer_transaction(payload: DesignerTransactionRequest) -> dict[str, Any]:
-    try:
-        return designer_service.apply(payload.model_dump())
-    except FileNotFoundError as error:
-        raise HTTPException(status_code=404, detail="Designer source file not found") from error
-    except RuntimeError as error:
-        raise HTTPException(status_code=409, detail=str(error)) from error
-    except (OSError, UnicodeDecodeError, ValueError) as error:
-        raise HTTPException(status_code=422, detail=str(error)) from error
-
-
-@app.post("/v1/designer/transactions/undo")
-def designer_undo() -> dict[str, Any]:
-    try:
-        return designer_service.undo()
-    except RuntimeError as error:
-        raise HTTPException(status_code=409, detail=str(error)) from error
-    except (OSError, ValueError) as error:
-        raise HTTPException(status_code=422, detail=str(error)) from error
-
-
-@app.post("/v1/designer/transactions/redo")
-def designer_redo() -> dict[str, Any]:
-    try:
-        return designer_service.redo()
-    except RuntimeError as error:
-        raise HTTPException(status_code=409, detail=str(error)) from error
-    except (OSError, ValueError) as error:
-        raise HTTPException(status_code=422, detail=str(error)) from error
-
-
-@app.get("/v1/project-templates")
-def project_templates() -> list[dict[str, Any]]:
-    return PROJECT_TEMPLATES
 
 
 @app.put("/v1/file")

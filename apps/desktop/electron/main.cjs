@@ -263,99 +263,11 @@ async function listKodexPlugins() {
   return [codexPlugin, claudePlugin]
 }
 
-function projectCreationPath() {
-  return path.join(app.getPath('userData'), 'project-creation.json')
-}
-
-function writeProjectCreation(payload) {
-  fs.mkdirSync(path.dirname(projectCreationPath()), { recursive: true })
-  fs.writeFileSync(projectCreationPath(), JSON.stringify(payload, null, 2))
-  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('project:progress', payload)
-  return payload
-}
-
-function sanitizeProjectName(value) {
-  const name = String(value || '').trim().replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '')
-  if (!name || name === '.' || name === '..') throw new Error('Enter a valid project name')
-  return name
-}
-
-function projectFiles(template, name, prompt) {
-  const title = name.replace(/[-_]+/g, ' ')
-  const description = String(prompt || `A ${template} application`).trim()
-  const sharedReadme = `# ${title}\n\n${description}\n\nCreated with Kodex Visual App Studio.\n`
-  const templates = {
-    'react-web': {
-      'package.json': JSON.stringify({ name, private: true, version: '0.1.0', type: 'module', scripts: { dev: 'vite', build: 'vite build' }, dependencies: { '@vitejs/plugin-react': '^5.0.0', vite: '^7.0.0', typescript: '^5.9.0', react: '^19.0.0', 'react-dom': '^19.0.0' }, devDependencies: {} }, null, 2),
-      'index.html': '<!doctype html><html><body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>\n',
-      'src/main.tsx': "import React from 'react'\nimport { createRoot } from 'react-dom/client'\nimport './styles.css'\nimport App from './App'\n\ncreateRoot(document.getElementById('root')!).render(<React.StrictMode><App /></React.StrictMode>)\n",
-      'src/App.tsx': `export default function App() {\n  return <main className="app"><section className="card"><p className="eyebrow">Kodex project</p><h1>${title}</h1><p>${description}</p><button type="button">Get started</button></section></main>\n}\n`,
-      'src/styles.css': ':root { font-family: Inter, system-ui, sans-serif; color: #f5f7fb; background: #0b1020; } * { box-sizing: border-box; } body { margin: 0; } .app { min-height: 100vh; display: grid; place-items: center; padding: 32px; } .card { width: min(680px, 100%); padding: 48px; border: 1px solid #28314d; border-radius: 24px; background: #121a30; } .eyebrow { color: #78a8ff; text-transform: uppercase; letter-spacing: .14em; } button { padding: 12px 18px; border: 0; border-radius: 10px; background: #4d83ff; color: white; }\n',
-      'README.md': sharedReadme
-    },
-    electron: {
-      'package.json': JSON.stringify({ name, private: true, version: '0.1.0', main: 'electron/main.cjs', scripts: { dev: 'concurrently "vite" "electron ."', build: 'vite build' }, dependencies: { electron: '^42.0.0', concurrently: '^9.0.0', '@vitejs/plugin-react': '^5.0.0', vite: '^7.0.0', typescript: '^5.9.0', react: '^19.0.0', 'react-dom': '^19.0.0' } }, null, 2),
-      'electron/main.cjs': "const { app, BrowserWindow } = require('electron')\napp.whenReady().then(() => new BrowserWindow({ width: 1100, height: 760 }).loadURL('http://localhost:5173'))\n",
-      'index.html': '<!doctype html><html><body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>\n',
-      'src/main.tsx': "import { createRoot } from 'react-dom/client'\nimport App from './App'\nimport './styles.css'\ncreateRoot(document.getElementById('root')!).render(<App />)\n",
-      'src/App.tsx': `export default function App() {\n  return <main className="window"><aside>Navigation</aside><section><h1>${title}</h1><p>${description}</p><button type="button">New window</button></section></main>\n}\n`,
-      'src/styles.css': 'body { margin: 0; font-family: system-ui; background: #15171b; color: #eee; } .window { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; } aside, section { padding: 28px; } aside { background: #202329; }\n',
-      'README.md': sharedReadme
-    },
-    flutter: {
-      'pubspec.yaml': `name: ${name.replace(/-/g, '_')}\ndescription: ${description}\nenvironment:\n  sdk: ">=3.3.0 <4.0.0"\ndependencies:\n  flutter:\n    sdk: flutter\n`,
-      'lib/main.dart': `import 'package:flutter/material.dart';\n\nvoid main() => runApp(const App());\nclass App extends StatelessWidget {\n  const App({super.key});\n  @override Widget build(BuildContext context) => MaterialApp(home: Scaffold(appBar: AppBar(title: const Text('${title}')), body: const SafeArea(child: Center(child: Text('${description.replace(/'/g, "\\'")}')))));\n}\n`,
-      'README.md': sharedReadme
-    },
-    maui: {
-      'MainPage.xaml': `<?xml version="1.0" encoding="utf-8" ?>\n<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui" xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml" x:Class="${name}.MainPage">\n  <VerticalStackLayout Padding="32" Spacing="16"><Label Text="${title}" FontSize="32" /><Label Text="${description}" /><Button Text="Get started" /></VerticalStackLayout>\n</ContentPage>\n`,
-      'README.md': sharedReadme
-    },
-    compose: {
-      'app/src/main/java/MainActivity.kt': `import android.os.Bundle\nimport androidx.activity.ComponentActivity\nimport androidx.activity.compose.setContent\nimport androidx.compose.material3.*\nimport androidx.compose.runtime.Composable\n\nclass MainActivity : ComponentActivity() { override fun onCreate(state: Bundle?) { super.onCreate(state); setContent { App() } } }\n@Composable fun App() { Scaffold { Column { Text("${title}"); Text("${description.replace(/"/g, '\\"')}"); Button(onClick = {}) { Text("Get started") } } } }\n`,
-      'README.md': sharedReadme
-    },
-    swiftui: {
-      'Sources/App/ContentView.swift': `import SwiftUI\n\nstruct ContentView: View {\n  var body: some View { NavigationStack { VStack(spacing: 16) { Text("${title}").font(.largeTitle); Text("${description.replace(/"/g, '\\"')}"); Button("Get started") {} }.padding() } }\n}\n`,
-      'Package.swift': `// swift-tools-version: 5.9\nimport PackageDescription\nlet package = Package(name: "${name}", platforms: [.macOS(.v13)], products: [.executable(name: "${name}", targets: ["App"])], targets: [.executableTarget(name: "App")])\n`,
-      'README.md': sharedReadme
-    },
-    api: {
-      'main.py': `from fastapi import FastAPI\n\napp = FastAPI(title=${JSON.stringify(title)})\n\n@app.get("/")\ndef root():\n    return {"name": ${JSON.stringify(title)}, "description": ${JSON.stringify(description)}}\n`,
-      'requirements.txt': 'fastapi\nuvicorn\n',
-      'README.md': sharedReadme
-    },
-    custom: { 'README.md': sharedReadme }
-  }
-  return templates[template] || templates.custom
-}
-
-function setupCommands(template) {
-  if (['react-web', 'electron'].includes(template)) return [['npm', ['install']], ['npm', ['run', 'build']]]
-  if (template === 'flutter') return [['flutter', ['pub', 'get']], ['flutter', ['analyze']]]
-  if (template === 'maui') return [['dotnet', ['restore']], ['dotnet', ['build']]]
-  if (template === 'compose') return [[process.platform === 'win32' ? 'gradlew.bat' : './gradlew', ['assembleDebug']]]
-  if (template === 'swiftui') return [['swift', ['build']]]
-  if (template === 'api') return [['python3', ['-m', 'compileall', '.']]]
-  return []
-}
-
-function runProjectSetup(command, args, cwd) {
-  return new Promise((resolve) => {
-    const child = spawn(command, args, { cwd, env: cleanChildEnvironment(), stdio: ['ignore', 'pipe', 'pipe'] })
-    let output = ''
-    child.stdout.on('data', (chunk) => { output += chunk.toString(); writeProjectCreation({ status: 'setting-up', command: [command, ...args], output: output.slice(-8000), project: cwd }) })
-    child.stderr.on('data', (chunk) => { output += chunk.toString(); writeProjectCreation({ status: 'setting-up', command: [command, ...args], output: output.slice(-8000), project: cwd }) })
-    child.once('error', (error) => resolve({ ok: false, command: [command, ...args], output: error.message }))
-    child.once('exit', (code) => resolve({ ok: code === 0, command: [command, ...args], output: output.slice(-12000), code }))
-  })
-}
-
 function buildApplicationMenu() {
   const send = (command) => mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents.send('menu:command', command)
   const template = [
     { label: 'File', submenu: [
-      { label: 'New Project', accelerator: 'CmdOrCtrl+Shift+N', click: () => send('new-project') },
+      { label: 'New Coding Workspace…', accelerator: 'CmdOrCtrl+Shift+N', click: () => send('new-workspace') },
       { label: 'Open Folder…', accelerator: 'CmdOrCtrl+O', click: () => send('open-folder') },
       { type: 'separator' },
       { label: 'Save', accelerator: 'CmdOrCtrl+S', click: () => send('save') },
@@ -363,10 +275,9 @@ function buildApplicationMenu() {
       { role: process.platform === 'darwin' ? 'close' : 'quit' }
     ] },
     { label: 'Edit', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] },
-    { label: 'Selection', submenu: [{ label: 'Select All', accelerator: 'CmdOrCtrl+A', click: () => send('designer-select-all') }, { label: 'Delete', accelerator: 'Backspace', click: () => send('designer-delete') }] },
+    { label: 'Selection', submenu: [{ role: 'selectAll' }] },
     { label: 'View', submenu: [
       { label: 'Command Palette…', accelerator: 'CmdOrCtrl+Shift+P', click: () => send('command-palette') },
-      { label: 'Designer', accelerator: 'CmdOrCtrl+Shift+D', click: () => send('show-designer') },
       { label: 'Explorer', accelerator: 'CmdOrCtrl+Shift+E', click: () => send('show-explorer') },
       { label: 'Terminal', accelerator: 'Ctrl+`', click: () => send('toggle-terminal') },
       { role: 'togglefullscreen' }, { role: 'reload' }, { role: 'toggleDevTools' }
@@ -375,7 +286,7 @@ function buildApplicationMenu() {
     { label: 'Run', submenu: [{ label: 'Run', accelerator: 'F5', click: () => send('run') }, { label: 'Start Debugging', accelerator: 'CmdOrCtrl+F5', click: () => send('debug') }, { label: 'Stop', accelerator: 'Shift+F5', click: () => send('stop') }] },
     { label: 'Terminal', submenu: [{ label: 'New Terminal', accelerator: 'Ctrl+Shift+`', click: () => send('new-terminal') }, { label: 'Kill Terminal', click: () => send('kill-terminal') }] },
     { label: 'Window', submenu: process.platform === 'darwin' ? [{ role: 'minimize' }, { role: 'zoom' }, { type: 'separator' }, { role: 'front' }] : [{ role: 'minimize' }, { role: 'close' }] },
-    { label: 'Help', submenu: [{ label: 'Kodex Documentation', click: () => shell.openExternal('https://github.com/openai/codex') }, { label: 'Diagnostics', click: () => send('diagnostics') }] }
+    { label: 'Help', submenu: [{ label: 'Kodex Documentation', click: () => shell.openExternal('https://github.com/fireyhellmarketing-cmd/kodex') }, { label: 'Diagnostics', click: () => send('diagnostics') }] }
   ]
   if (process.platform === 'darwin') {
     template.unshift({
@@ -676,6 +587,20 @@ function registerWorkspaceIpc() {
   ipcMain.handle('workspace:current', () => currentWorkspace ? workspaceSummary(currentWorkspace) : null)
   ipcMain.handle('workspace:recent', () => readRecentWorkspaces().map(workspaceSummary))
   ipcMain.handle('workspace:new-file', startUntitledWorkspace)
+  ipcMain.handle('workspace:create', async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Create or choose an empty coding workspace',
+      defaultPath: currentWorkspace || app.getPath('documents'),
+      properties: ['openDirectory', 'createDirectory']
+    })
+    if (result.canceled || !result.filePaths[0]) return null
+    const workspace = path.resolve(result.filePaths[0])
+    const visibleEntries = fs.readdirSync(workspace).filter((entry) => entry !== '.DS_Store')
+    if (visibleEntries.length) {
+      throw new Error('New Coding Workspace requires an empty folder. Use Open Folder for an existing project.')
+    }
+    return switchWorkspace(workspace)
+  })
   ipcMain.handle('workspace:open-dialog', async () => {
     const recent = readRecentWorkspaces()
     const result = await dialog.showOpenDialog(mainWindow, {
@@ -704,52 +629,6 @@ function registerWorkspaceIpc() {
     ).length
     if (imageCount > 10) throw new Error('You can attach up to 10 images at once.')
     return result.filePaths.map(readAttachment)
-  })
-  ipcMain.handle('project:choose-parent', async () => {
-    const result = await dialog.showOpenDialog(mainWindow, {
-      title: 'Choose where to create the project',
-      defaultPath: currentWorkspace || app.getPath('documents'),
-      properties: ['openDirectory', 'createDirectory']
-    })
-    return result.canceled ? null : result.filePaths[0]
-  })
-  ipcMain.handle('project:creation-state', () => {
-    try { return JSON.parse(fs.readFileSync(projectCreationPath(), 'utf8')) } catch { return null }
-  })
-  ipcMain.handle('project:create', async (_event, options) => {
-    const parent = path.resolve(String(options?.parent || ''))
-    if (!fs.existsSync(parent) || !fs.statSync(parent).isDirectory()) throw new Error('Choose a valid parent directory')
-    const name = sanitizeProjectName(options?.name)
-    const destination = path.join(parent, name)
-    if (fs.existsSync(destination)) throw new Error(`A folder named "${name}" already exists`)
-    const template = String(options?.template || 'custom')
-    writeProjectCreation({ status: 'scaffolding', name, template, project: destination })
-    fs.mkdirSync(destination)
-    for (const [relative, content] of Object.entries(projectFiles(template, name, options?.prompt))) {
-      const target = path.join(destination, relative)
-      fs.mkdirSync(path.dirname(target), { recursive: true })
-      fs.writeFileSync(target, content, 'utf8')
-    }
-    const blueprint = {
-      platform: options?.platform || template,
-      framework: options?.framework || template,
-      screens: ['Home'],
-      features: String(options?.prompt || '').trim() ? [String(options.prompt).trim()] : ['Starter experience'],
-      dependencies: setupCommands(template).map(([command]) => command),
-      validationCommands: setupCommands(template).map(([command, args]) => [command, ...args].join(' '))
-    }
-    fs.mkdirSync(path.join(destination, '.kodex-agent', 'designer'), { recursive: true })
-    fs.writeFileSync(path.join(destination, '.kodex-agent', 'designer', 'blueprint.json'), JSON.stringify(blueprint, null, 2))
-    const setup = []
-    if (options?.install !== false) {
-      for (const [command, args] of setupCommands(template)) {
-        const result = await runProjectSetup(command, args, destination)
-        setup.push(result)
-        if (!result.ok) break
-      }
-    }
-    writeProjectCreation({ status: setup.some((item) => !item.ok) ? 'needs-setup' : 'complete', name, template, project: destination, blueprint, setup })
-    return switchWorkspace(destination)
   })
   ipcMain.handle('core:restart', restartCore)
   ipcMain.handle('core:diagnostics', coreDiagnostics)
@@ -797,14 +676,6 @@ function registerWorkspaceIpc() {
     const pluginStates = { ...(desktopSettings.pluginStates || {}), [pluginId]: false }
     writeDesktopSettings({ pluginStates })
     return { id: pluginId, deleted: true }
-  })
-  ipcMain.handle('designer:devices', async () => {
-    const checks = await Promise.all([
-      runProjectSetup('flutter', ['devices', '--machine'], currentWorkspace || repoRoot),
-      runProjectSetup('xcrun', ['simctl', 'list', 'devices', 'available', '-j'], currentWorkspace || repoRoot),
-      runProjectSetup('adb', ['devices', '-l'], currentWorkspace || repoRoot)
-    ])
-    return checks.map((result, index) => ({ runtime: ['flutter', 'ios', 'android'][index], available: result.ok, output: result.output }))
   })
   ipcMain.handle('desktop:open-external', (_event, url) => {
     const target = new URL(String(url))

@@ -1,212 +1,185 @@
-<div align="center">
-  <img src="apps/desktop/electron/kodex-icon.png" width="128" alt="Kodex open-source AI IDE logo">
+# Kodex
 
-  # Kodex
+<p align="center">
+  <img src="apps/desktop/src/assets/kodex-icon.png" alt="Kodex AI coding IDE icon" width="128" />
+</p>
 
-  **An open-source, local-first AI IDE and visual application studio for building real software with Codex, Claude, Ollama, LM Studio, and OpenAI-compatible models.**
+<p align="center">
+  <strong>An open-source, local-first AI coding IDE with a source-linked autonomous agent.</strong>
+</p>
 
-  [![License: MIT](https://img.shields.io/badge/License-MIT-4c8dff.svg)](LICENSE)
-  [![Desktop](https://img.shields.io/badge/Desktop-macOS%20%7C%20Windows%20%7C%20Linux-111827.svg)](#platform-support)
-  [![Core Tests](https://img.shields.io/badge/Core%20tests-75%20passing-22c55e.svg)](#development-and-testing)
-  [![Built with Electron](https://img.shields.io/badge/UI-Electron%20%2B%20React-47848f.svg)](apps/desktop)
-  [![Python Core](https://img.shields.io/badge/Core-Python%20%2B%20FastAPI-009688.svg)](apps/core)
+<p align="center">
+  <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-blue.svg" /></a>
+  <img alt="Electron" src="https://img.shields.io/badge/desktop-Electron-47848F" />
+  <img alt="React" src="https://img.shields.io/badge/renderer-React-61DAFB" />
+  <img alt="FastAPI" src="https://img.shields.io/badge/core-FastAPI-009688" />
+</p>
 
-  [Features](#features) · [Visual App Studio](#visual-app-studio) · [Install](#quick-start) · [Architecture](#architecture) · [Contributing](CONTRIBUTING.md)
-</div>
+Kodex is a desktop development environment for programmers who want an AI coding agent working
+inside a familiar IDE. It combines Monaco editing, an integrated terminal, Run and Debug,
+Git workflows, project intelligence, local model support, approvals, recovery, and persistent
+agent sessions in one application.
 
-![Kodex AI IDE workspace with editor, agent activity, terminal, and project tools](kodex-premium-ide-1920x1080.png)
+Kodex works directly with real source files. Agent edits, commands, approvals, failures, changed
+files, and validation results remain visible and reviewable.
 
-## What is Kodex?
+## Why Kodex
 
-Kodex is a desktop AI development environment designed to help people plan, create, debug,
-run, and maintain software without giving up control of their source code or local machine.
-It combines a VS Code-style workspace, a persistent autonomous coding agent, an integrated
-terminal, project intelligence, model-provider choice, and a source-authoritative visual UI
-designer in one application.
+- **Code in a real IDE:** Monaco Editor, file explorer, search, outline, terminal, source control,
+  command palette, and configurable themes.
+- **Work with an autonomous coding agent:** ask Kodex to inspect, plan, implement, debug, test,
+  review, and explain code across a workspace.
+- **Keep context visible:** active file, open and unsaved files, diagnostics, Git branch, running
+  processes, run profiles, and project intelligence can be included with each request.
+- **Stay in control:** choose read-only, approval-based, workspace, or full-access permissions.
+- **Recover from failures:** pause, stop, resume, repair, retry, inspect changed files, and review
+  validation evidence without losing the conversation.
+- **Use local or cloud models:** Codex, Claude Code, Ollama, LM Studio, and OpenAI-compatible APIs.
+- **Keep work local by default:** the desktop owns a local authenticated Core and stores project
+  continuity in a local SQLite database.
 
-Unlike a chat window that only suggests code, Kodex can inspect a workspace, create a plan,
-edit files through typed tools, run commands, validate results, recover interrupted work, and
-show its activity inside the same project window. Every consequential operation is governed by
-an explicit permission mode, and real framework files remain the source of truth.
+## Core Features
 
-Kodex is open source under the MIT License.
+### Coding Workspace
 
-## Why Kodex Helps
+- Monaco-based editing with syntax support, tabs, breadcrumbs, minimap, and unsaved-file state.
+- Recursive project explorer with file creation, folders, rename, deletion, and exact path handling.
+- Text and symbol search, file outline, timeline, tasks, memory, and workspace snapshots.
+- Integrated xterm.js terminal backed by `node-pty`.
+- Run and Debug profile detection for common project toolchains.
+- Git status, diffs, staging, unstaging, branches, commit summaries, and repository context.
 
-- **Build complete applications:** move from an idea to scaffolded, validated source code.
-- **Use the model you prefer:** connect ChatGPT Codex, Claude Code, Ollama, LM Studio, or an
-  OpenAI-compatible endpoint.
-- **Keep work local:** the Core service, project state, terminal, files, and local-model traffic
-  stay on your machine by default.
-- **Understand every change:** inspect agent steps, changed files, source ranges, diagnostics,
-  validation output, and recovery actions.
-- **Design and code together:** visually edit supported interfaces while preserving normal
-  React, Flutter, XAML, Compose, SwiftUI, or HTML source files.
-- **Recover safely:** snapshots, conflict detection, stale-file protection, process cancellation,
-  transaction history, and persistent sessions reduce the cost of interrupted work.
-- **Extend the IDE:** plugins can add AI tabs, project templates, designer adapters, toolbox
-  components, and specialized workflows.
+### Kodex Agent
 
-## Features
+- Persistent chats and clean-session controls.
+- Normal and plan-first execution modes.
+- Live planning, edits, commands, validation, approvals, and completion evidence.
+- Source-linked changed files that open directly in Monaco.
+- Steering while a run is active, plus pause, resume, stop, retry, and repair.
+- Attachments, IDE context controls, model selection, permissions, and goal pursuit.
+- Coding shortcuts for build, debug, explain, test, and review.
+- Provider fallback and structured recovery messages.
 
-### AI Coding Agent
+### Providers And Plugins
 
-- Natural-language chat, planning, and implementation modes.
-- Multi-step autonomous execution with visible task and tool activity.
-- ChatGPT Codex and Claude Code account integrations.
-- Local model support through Ollama and LM Studio.
-- OpenAI-compatible cloud and self-hosted provider support.
-- Steering messages while an agent run is active.
-- Approval gates for sensitive, destructive, credential, and external operations.
-- Context condensation, provider fallback, recovery attempts, and completion validation.
+Kodex can route work through:
 
-### Desktop IDE
+- OpenAI Codex using the official local Codex CLI and its existing login.
+- Anthropic Claude Code using the local Claude Code installation.
+- Ollama for locally installed models.
+- LM Studio through its local OpenAI-compatible endpoint.
+- Other OpenAI-compatible servers.
 
-- File explorer, Monaco code editor, symbol outline, search, source control, timeline, tasks,
-  plugins, diagnostics, and model settings.
-- Integrated PTY terminal with multiple terminal sessions.
-- Run and debug profile detection for common project types.
-- Native menus for File, Edit, Selection, View, Go, Run, Terminal, Window, and Help.
-- Resizable explorer, editor, terminal, and AI panel.
-- Workspace restoration, autosave awareness, external-change detection, and snapshots.
-
-### Visual App Studio
-
-Kodex includes an AI-native visual application designer inspired by Visual Studio and modern
-low-code tools. Supported UI files can be opened from the Designer activity panel or by
-double-clicking them in the explorer.
-
-- Design, Source, Split, and Preview editor modes.
-- Component toolbox, hierarchy tree, responsive canvas, device profiles, and properties panel.
-- Drag/drop and source-generating component insertion.
-- Exact source-line navigation from visual elements.
-- Conflict-checked edits with transaction-based undo and redo.
-- AI context for the selected node, hierarchy, properties, source ranges, diagnostics, and
-  active device preview.
-- Project templates for websites, desktop applications, Windows applications, macOS/iOS apps,
-  Android apps, Flutter apps, APIs, and custom projects.
-
-Adapter coverage:
-
-| Framework | Support |
-| --- | --- |
-| React / TSX and HTML | Full designer |
-| Electron + React | Full designer and desktop project template |
-| Flutter | Full-tier source mapping and mobile profiles |
-| .NET MAUI / XAML | Core visual adapter |
-| Android Jetpack Compose | Core visual adapter |
-| SwiftUI | Core visual adapter |
-
-See [Visual App Studio documentation](docs/VISUAL_APP_STUDIO.md).
-
-### Plugin System
-
-- Kodex remains permanently available as the first agent tab.
-- Enabled AI providers appear as independent tabs with their own branding and model selection.
-- Plugins can be enabled, disabled, opened, or deleted.
-- Deleting an active provider returns the UI to Kodex safely.
-- Plugin manifests support agent tabs, uninstall behavior, project templates, toolbox
-  contributions, and designer adapters.
+Kodex remains the permanent built-in agent tab. Enabled provider plugins appear beside it with
+their own branding and model choices. Plugins can be installed, enabled, disabled, or deleted.
 
 ## Quick Start
 
 ### Requirements
 
 - Node.js 20 or newer
-- npm 10 or newer
-- Python 3.10 or newer
-- Git
-- Optional: Codex CLI, Claude Code CLI, Ollama, or LM Studio
+- npm
+- Python 3.9 or newer
+- Platform build tools required by Electron and `node-pty`
 
-### Install and Run
+### Install
 
 ```bash
 git clone https://github.com/fireyhellmarketing-cmd/kodex.git
 cd kodex
 npm install
-npm run start
 ```
 
-`npm run start` launches the native Kodex desktop shell, Vite renderer, and authenticated local
-Core service. Core listens on `127.0.0.1:7799` by default.
+### Run
 
-### Connect an AI Provider
+```bash
+npm run dev
+```
 
-- **ChatGPT Codex:** open Settings → Models and use the official Codex browser login.
-- **Claude Code:** install/login through the official Claude Code CLI.
-- **Ollama:** start Ollama locally; Kodex discovers installed models.
-- **LM Studio:** start the local server, normally at `http://127.0.0.1:1234/v1`.
-- **OpenAI-compatible:** configure a base URL, model, and securely stored API key.
+Kodex starts the Electron desktop, React renderer, and authenticated local FastAPI Core.
 
-Kodex does not ask you to paste ChatGPT or Claude account passwords into the app.
+### First Workspace
+
+1. Choose **Open Folder** for an existing repository.
+2. Choose **New Coding Workspace** for an empty folder.
+3. Open the Kodex panel and describe what you want to build or fix.
+4. Review edits, commands, approvals, and validation in the agent timeline.
+
+New Coding Workspace intentionally creates no framework files. Source generation happens only
+when the user asks Kodex, keeping project structure explicit and reviewable.
+
+## Model Setup
+
+### Codex
+
+Install and authenticate the official Codex CLI:
+
+```bash
+codex login
+codex login status
+```
+
+Kodex uses the existing local Codex authentication and does not request ChatGPT passwords or copy
+access tokens into the project.
+
+### Ollama
+
+```bash
+ollama serve
+ollama pull qwen3:8b
+```
+
+### LM Studio
+
+Start the LM Studio local server. Kodex defaults to:
+
+```text
+http://127.0.0.1:1234/v1
+```
 
 ## Architecture
 
 ```text
 apps/
-├── core/       Python, FastAPI, SQLite, agent runtime, tools, recovery, designer API
-└── desktop/    Electron, React, TypeScript, Monaco, xterm.js, native IPC
-plugins/        AI provider and Kodex workspace plugins
-scripts/        Core bundling and release validation
-packaging/      Platform packaging and signing configuration
-docs/           Visual designer and developer documentation
+  desktop/   Electron shell, React renderer, Monaco, terminal, menus, provider bridge
+  core/      FastAPI, SQLite, agent runtime, workspace tools, Git, validation, recovery
+plugins/     Kodex plugin bundles and skills
+packaging/   Native packaging configuration
+scripts/     Build, bundle, and release validation
 ```
 
-### Core
+The Electron main process owns privileged desktop operations and starts the Core with a
+session-specific bearer token. The renderer uses the preload bridge for native actions and talks
+to Core APIs for workspace and agent operations.
 
-The Python Core owns workspace-safe file operations, conversations, agent runs, approvals,
-provider routing, task persistence, snapshots, process control, diagnostics, project
-intelligence, memory, Git operations, and visual designer transactions.
+## Security
 
-### Desktop
+- Workspace path boundaries are enforced by Core.
+- Consequential actions use explicit permission and approval policies.
+- Provider credentials are stored through Electron secure storage when available.
+- The renderer runs with context isolation and without Node integration.
+- Destructive, credential, system, and permission-changing operations remain gated.
+- Agent success is tied to validation evidence instead of an unsupported completion claim.
 
-Electron owns native dialogs, secure credential storage, application lifecycle, menus, terminal
-PTYs, project scaffolding, plugin lifecycle operations, update checks, and the authenticated
-connection to Core. React renders the IDE and Monaco provides source editing.
+See [SECURITY.md](SECURITY.md) for reporting and disclosure guidance.
 
-### Security Model
-
-- Core binds to localhost and uses a per-install bearer token.
-- Workspace paths are resolved and checked before filesystem access.
-- Provider credentials use Electron `safeStorage`.
-- Destructive and sensitive operations require explicit approval.
-- Agent edits are applied through typed workspace tools with snapshots and validation.
-- Full-access mode does not silently bypass sensitive-operation approval.
-
-Read [SECURITY.md](SECURITY.md) before reporting a vulnerability.
-
-## Platform Support
-
-Kodex packages for:
-
-- macOS, including Apple Silicon
-- Windows
-- Linux
-
-The GitHub Actions packaging workflow builds on each native operating system. Framework-specific
-mobile or desktop targets still require their official SDKs, such as Flutter, Android Studio,
-Xcode, or .NET.
-
-## Development and Testing
+## Development
 
 ```bash
-# Python Core tests
-PYTHONPATH=apps/core/src python3 -m unittest discover -s apps/core/tests -v
+# Core tests
+PYTHONPATH=apps/core/src PYTHONPYCACHEPREFIX=.kodex-agent/pycache \
+  python3 -m unittest discover -s apps/core/tests -q
 
 # Desktop checks
 npm run lint -w apps/desktop
-npm run test:terminal -w apps/desktop
 npm run build -w apps/desktop
+npm run test:terminal -w apps/desktop
 
-# Complete distribution validation
+# Release validation
 npm run release:validate
 ```
 
-Current local verification covers 75 Core tests, desktop lint/build, terminal behavior,
-cross-platform package targets, native runtime assets, authenticated API health, and Electron
-smoke launching.
-
-## Build Native Packages
+## Packaging
 
 ```bash
 npm run package:mac -w apps/desktop
@@ -214,42 +187,20 @@ npm run package:win -w apps/desktop
 npm run package:linux -w apps/desktop
 ```
 
-Signing and notarization are optional for local development and required for trusted public
-distribution. See [packaging/README.md](packaging/README.md).
-
-## Roadmap
-
-- Richer AST-backed framework transformations.
-- Live framework preview sessions and emulator controls.
-- Complete responsive constraints, alignment, grouping, and multi-selection.
-- More designer adapters and community project templates.
-- Signed releases and automatic updates.
-- Expanded accessibility diagnostics and visual regression fixtures.
+The packaged application name and native identity are **Kodex**.
 
 ## Contributing
 
-Contributions, bug reports, documentation improvements, framework adapters, project templates,
-and provider integrations are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a
-pull request.
+Contributions to the editor, agent runtime, providers, project intelligence, terminal, Git
+workflows, testing, accessibility, and packaging are welcome. Read
+[CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
 
-Please keep changes focused, preserve existing user files, add tests proportional to risk, and
-verify both Core and desktop behavior.
+## License
 
-## Open Source License
-
-Kodex is released under the [MIT License](LICENSE). You may use, copy, modify, merge, publish,
-distribute, sublicense, and sell copies subject to the license terms.
+Kodex is open-source software released under the [MIT License](LICENSE).
 
 ## Keywords
 
-AI IDE, open-source AI coding assistant, autonomous coding agent, local AI development
-environment, Codex desktop app, Claude Code IDE, Ollama coding assistant, LM Studio IDE,
-Electron IDE, Python FastAPI agent, visual app builder, React visual designer, Flutter app
-builder, XAML designer, Jetpack Compose designer, SwiftUI designer, local-first developer tools.
-
----
-
-<div align="center">
-  Built as an open platform for people who want AI assistance without surrendering their tools,
-  source code, or ability to understand what changed.
-</div>
+AI coding IDE, autonomous coding agent, open-source IDE, local AI coding assistant, Codex desktop,
+Claude Code IDE, Ollama coding assistant, LM Studio IDE, Electron code editor, Monaco Editor,
+FastAPI coding agent, local-first developer tools, AI pair programmer, agentic software development.
