@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kodex-core"
+version = "0.1.0"
+description = "Local Kodex Core API"
+requires-python = ">=3.9"
+dependencies = [
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.30",
+  "pydantic>=2.8",
+  "httpx>=0.27",
+  "tree-sitter==0.20.1; python_version < '3.10'",
+  "tree-sitter-languages>=1.10; python_version < '3.10'",
+  "tree-sitter>=0.24; python_version >= '3.10'",
+  "tree-sitter-language-pack>=0.9; python_version >= '3.10'",
+]
+
+[project.scripts]
+kodex-core = "codex_core.main:app_cli"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

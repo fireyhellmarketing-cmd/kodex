@@ -1,0 +1,35 @@
+{
+  "name": "anthropic-claude-code",
+  "version": "0.1.0",
+  "description": "Use Anthropic Claude Code as a planning and coding-model provider inside Kodex.",
+  "author": {
+    "name": "Kodex"
+  },
+  "enabled": true,
+  "uninstall": {
+    "provider": "integration",
+    "command": []
+  },
+  "agentTab": {
+    "id": "claude",
+    "label": "Claude",
+    "order": 20
+  },
+  "designerAdapters": [],
+  "toolboxContributions": [],
+  "projectTemplates": [],
+  "interface": {
+    "displayName": "Claude Code for Kodex",
+    "shortDescription": "Use Claude Code with Kodex workspace tools.",
+    "longDescription": "A built-in Claude Code provider for Kodex. Claude supplies model decisions while Kodex retains editing, approvals, history, diagnostics, and validation.",
+    "developerName": "Kodex",
+    "category": "Developer Tools",
+    "capabilities": ["Read", "Interactive"],
+    "defaultPrompt": [
+      "Build this feature with Claude Code.",
+      "Use Claude to diagnose this workspace.",
+      "Review this implementation with Claude."
+    ],
+    "brandColor": "#D97757"
+  }
+}

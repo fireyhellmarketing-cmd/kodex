@@ -1,0 +1,38 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "kodex: stop app",
+      "type": "shell",
+      "command": "for port in 5173 7799; do pids=$(lsof -ti tcp:$port 2>/dev/null || true); if [ -n \"$pids\" ]; then kill $pids 2>/dev/null || true; fi; done",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "never",
+        "panel": "dedicated",
+        "close": true
+      }
+    },
+    {
+      "label": "kodex: start app",
+      "type": "shell",
+      "command": "npm run start",
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "kodex",
+        "pattern": {
+          "regexp": "^(.*)$",
+          "message": 1
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".*kodex-desktop.*electron:dev.*",
+          "endsPattern": ".*VITE.*ready in.*"
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    }
+  ]
+}

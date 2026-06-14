@@ -1,0 +1,31 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Kodex: Run App",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm run start",
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "kodex: stop app",
+      "postDebugTask": "kodex: stop app"
+    },
+    {
+      "name": "Kodex: Debug Renderer",
+      "type": "pwa-chrome",
+      "request": "launch",
+      "url": "http://127.0.0.1:5173",
+      "webRoot": "${workspaceFolder}/apps/desktop",
+      "preLaunchTask": "kodex: start app",
+      "postDebugTask": "kodex: stop app",
+      "sourceMaps": true
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Kodex: Run and Debug",
+      "configurations": ["Kodex: Debug Renderer"],
+      "stopAll": true
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "name": "openai-codex-kodex",
+  "version": "0.1.0",
+  "description": "Build, diagnose, and verify the Kodex desktop agent and its OpenAI Codex integration.",
+  "author": {
+    "name": "Kodex"
+  },
+  "skills": "./skills/",
+  "enabled": true,
+  "uninstall": {
+    "provider": "codex-cli",
+    "command": ["codex", "plugin", "remove", "openai-codex-kodex@personal"]
+  },
+  "agentTab": {
+    "id": "openai-codex",
+    "label": "ChatGPT Codex",
+    "order": 10
+  },
+  "designerAdapters": ["react", "electron"],
+  "toolboxContributions": [],
+  "projectTemplates": ["react-web", "electron"],
+  "interface": {
+    "displayName": "OpenAI Codex for Kodex",
+    "shortDescription": "Operate and repair the Kodex desktop coding agent.",
+    "longDescription": "A workspace engineering workflow for Kodex. It covers the Core agent runtime, Electron desktop, ChatGPT Codex authentication, safe editing, recovery, and release verification.",
+    "developerName": "Kodex",
+    "category": "Developer Tools",
+    "capabilities": ["Read", "Write", "Interactive"],
+    "defaultPrompt": [
+      "Diagnose and fix the Kodex agent end to end.",
+      "Verify the ChatGPT Codex provider integration.",
+      "Improve Kodex UI and run all release checks."
+    ],
+    "brandColor": "#12A594"
+  }
+}

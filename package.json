@@ -1,0 +1,27 @@
+{
+  "name": "kodex",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Open-source, local-first AI IDE and visual application studio",
+  "license": "MIT",
+  "author": "Aayush Datta",
+  "homepage": "https://github.com/fireyhellmarketing-cmd/kodex",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fireyhellmarketing-cmd/kodex.git"
+  },
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run start",
+    "start": "npm run electron:dev -w apps/desktop",
+    "postinstall": "npm run native:rebuild -w apps/desktop",
+    "build": "PYTHONPYCACHEPREFIX=.kodex-agent/pycache python3 -m compileall apps/core/src && npm run build -w apps/desktop",
+    "lint": "npm run lint -w apps/desktop",
+    "release:validate": "npm run build && node scripts/validate-release.cjs"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
