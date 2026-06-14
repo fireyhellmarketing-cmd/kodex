@@ -6,7 +6,19 @@ import '@xterm/xterm/css/xterm.css'
 type Props = {
   processesRunning: number
   theme: string
+  collapsed: boolean
+  maximized: boolean
+  activePanel: BottomPanelId
+  launchRequest: TerminalLaunchRequest | null
+  processLogs: Array<{ id: number; name: string; status: string; logs: Array<{ stream: string; line: string; time: string }> }>
+  onPanelChange: (panel: BottomPanelId) => void
+  onToggleCollapsed: () => void
+  onToggleMaximized: () => void
+  onOpenSource: (path: string, line: number, column: number) => void
 }
+
+export type BottomPanelId = 'terminal' | 'output' | 'debug' | 'problems' | 'ports'
+export type TerminalLaunchRequest = { key: number; name: string; command: string; cwd: string; mode: 'run' | 'debug' }
 
 type PortRecord = {
   process: string
@@ -31,22 +43,36 @@ const terminalThemes: Record<string, { background: string; foreground: string; c
   solarized: { background: '#07191d', foreground: '#e4dfc7', cursor: '#d6a84b', selectionBackground: '#28515a' },
 }
 
-export default function TerminalPane({ processesRunning, theme }: Props) {
+export default function TerminalPane({
+  processesRunning,
+  theme,
+  collapsed,
+  maximized,
+  activePanel,
+  launchRequest,
+  processLogs,
+  onPanelChange,
+  onToggleCollapsed,
+  onToggleMaximized,
+  onOpenSource,
+}: Props) {
   const hostRef = useRef<HTMLDivElement>(null)
   const xtermRef = useRef<Terminal | null>(null)
   const fitRef = useRef<FitAddon | null>(null)
   const [terminals, setTerminals] = useState<CodexTerminal[]>([])
   const [activeId, setActiveId] = useState<number | null>(null)
-  const [panel, setPanel] = useState<'terminal' | 'ports'>('terminal')
   const [ports, setPorts] = useState<PortRecord[]>([])
   const [terminalError, setTerminalError] = useState('')
+  const [terminalOutput, setTerminalOutput] = useState<Array<{ terminalId: number; name: string; stream: string; time: string }>>([])
   const buffersRef = useRef(new Map<number, string>())
   const sequencesRef = useRef(new Map<number, number>())
+  const terminalsRef = useRef<CodexTerminal[]>([])
   const activeIdRef = useRef<number | null>(null)
   const terminalBootstrapRef = useRef(false)
   activeIdRef.current = activeId
+  terminalsRef.current = terminals
 
-  async function createTerminal() {
+  async function createTerminal(options: { name?: string; command?: string; cwd?: string } = {}) {
     if (!window.codex) return
     setTerminalError('')
     try {
@@ -54,6 +80,7 @@ export default function TerminalPane({ processesRunning, theme }: Props) {
       const terminal = await window.codex.createTerminal({
         cols: xterm?.cols || 100,
         rows: xterm?.rows || 30,
+        ...options,
       })
       buffersRef.current.set(terminal.id, terminal.output || '')
       sequencesRef.current.set(terminal.id, terminal.sequence || 0)
@@ -63,6 +90,24 @@ export default function TerminalPane({ processesRunning, theme }: Props) {
     } catch (error) {
       setTerminalError(error instanceof Error ? error.message : String(error))
     }
+  }
+
+  async function renameTerminal(id: number) {
+    if (!window.codex) return
+    const current = terminals.find((terminal) => terminal.id === id)
+    const name = window.prompt('Terminal name', current?.name || '')
+    if (!name?.trim()) return
+    const renamed = await window.codex.renameTerminal(id, name)
+    setTerminals((items) => items.map((item) => item.id === id ? renamed : item))
+  }
+
+  async function duplicateTerminal(id: number) {
+    if (!window.codex) return
+    const terminal = await window.codex.duplicateTerminal(id)
+    buffersRef.current.set(terminal.id, terminal.output || '')
+    sequencesRef.current.set(terminal.id, terminal.sequence || 0)
+    setTerminals((items) => [...items, terminal])
+    setActiveId(terminal.id)
   }
 
   async function refreshPorts() {
@@ -164,6 +209,13 @@ export default function TerminalPane({ processesRunning, theme }: Props) {
       if (sequence <= (sequencesRef.current.get(id) ?? 0)) return
       sequencesRef.current.set(id, sequence)
       buffersRef.current.set(id, `${buffersRef.current.get(id) ?? ''}${data}`.slice(-200_000))
+      const terminal = terminalsRef.current.find((item) => item.id === id)
+      if (terminal?.command) {
+        setTerminalOutput((current) => [
+          ...current,
+          { terminalId: id, name: terminal.name, stream: data, time: new Date().toISOString() },
+        ].slice(-1000))
+      }
       if (id === activeIdRef.current) xtermRef.current?.write(data)
     })
     const removeExit = window.codex.onTerminalExit(({ id, exitCode }) => {
@@ -215,7 +267,7 @@ export default function TerminalPane({ processesRunning, theme }: Props) {
 
   useEffect(() => {
     const xterm = xtermRef.current
-    if (!xterm || activeId === null || panel !== 'terminal') return
+    if (!xterm || activeId === null || activePanel !== 'terminal' || collapsed) return
     xterm.reset()
     const buffered = buffersRef.current.get(activeId)
     if (buffered) xterm.write(buffered)
@@ -227,24 +279,68 @@ export default function TerminalPane({ processesRunning, theme }: Props) {
       }
       xterm.focus()
     })
-  }, [activeId, panel])
+  }, [activeId, activePanel, collapsed])
 
   useEffect(() => {
-    if (panel !== 'ports') return
+    if (activePanel !== 'ports' || collapsed) return
     void refreshPorts()
     const timer = window.setInterval(() => void refreshPorts(), 2000)
     return () => window.clearInterval(timer)
-  }, [panel])
+  }, [activePanel, collapsed])
+
+  useEffect(() => {
+    if (!launchRequest) return
+    void createTerminal({
+      name: `${launchRequest.mode === 'debug' ? 'Debug' : 'Run'}: ${launchRequest.name}`,
+      command: launchRequest.command,
+      cwd: launchRequest.cwd,
+    })
+  }, [launchRequest?.key])
+
+  const processOutputLines = processLogs.flatMap((process) =>
+    process.logs.map((log) => ({ ...log, process: process.name, processId: process.id, status: process.status })),
+  )
+  const terminalOutputLines = terminalOutput.map((entry) => ({
+    line: entry.stream,
+    stream: 'stdout',
+    time: entry.time,
+    process: entry.name,
+    processId: entry.terminalId,
+    status: 'running',
+  }))
+  const outputLines = [...processOutputLines, ...terminalOutputLines]
+    .filter((entry) => activePanel !== 'debug' || entry.process.startsWith('Debug:'))
+    .slice(-1000)
+  const problems = outputLines.flatMap((entry) => {
+    const match = entry.line.match(/(?:^|\s)([^:\s]+\.[A-Za-z0-9]+):(\d+)(?::(\d+))?[:\s]+(.+)/)
+    return match ? [{
+      path: match[1],
+      line: Number(match[2]),
+      column: Number(match[3] || 1),
+      message: match[4],
+      severity: /error|failed|exception/i.test(entry.line) ? 'error' : 'warning',
+    }] : []
+  })
 
   return (
     <>
       <div className="panel-tabs terminal-tabs">
-        <button className={panel === 'terminal' ? 'active' : ''} onClick={() => setPanel('terminal')}>TERMINAL</button>
-        <button className={panel === 'ports' ? 'active' : ''} onClick={() => setPanel('ports')}>PORTS</button>
+        {(['terminal', 'output', 'debug', 'problems', 'ports'] as BottomPanelId[]).map((panel) => (
+          <button
+            className={activePanel === panel ? 'active' : ''}
+            key={panel}
+            onClick={() => activePanel === panel && !collapsed ? onToggleCollapsed() : onPanelChange(panel)}
+          >
+            {panel.toUpperCase()}{panel === 'problems' && problems.length ? ` ${problems.length}` : ''}
+          </button>
+        ))}
         <div className="panel-spacer" />
         <span>{processesRunning} running</span>
+        <button title={maximized ? 'Restore panel' : 'Maximize panel'} onClick={onToggleMaximized}>{maximized ? '◱' : '□'}</button>
+        <button title={collapsed ? 'Expand panel' : 'Collapse panel'} onClick={onToggleCollapsed}>{collapsed ? '⌃' : '⌄'}</button>
       </div>
-      {panel === 'terminal' ? (
+      <div className={`bottom-panel-content ${collapsed ? 'collapsed' : ''}`}>
+      {activePanel === 'terminal' ? (
         <>
           <div className="terminal-toolbar">
             <div className="terminal-tab-list">
@@ -260,6 +356,8 @@ export default function TerminalPane({ processesRunning, theme }: Props) {
               ))}
             </div>
             <button title="New terminal" onClick={() => void createTerminal()}>＋</button>
+            <button title="Rename terminal" disabled={activeId === null} onClick={() => activeId !== null && void renameTerminal(activeId)}>✎</button>
+            <button title="Duplicate terminal" disabled={activeId === null} onClick={() => activeId !== null && void duplicateTerminal(activeId)}>◫</button>
             <button title="Clear terminal" onClick={() => xtermRef.current?.clear()}>⌫</button>
             <button
               title="Kill terminal"
@@ -280,7 +378,7 @@ export default function TerminalPane({ processesRunning, theme }: Props) {
             )}
           </div>
         </>
-      ) : (
+      ) : activePanel === 'ports' ? (
         <div className="ports-view">
           <header><span>FORWARDED ADDRESS</span><span>PROCESS</span><span>ORIGIN</span><span /></header>
           {ports.map((port) => (
@@ -295,7 +393,30 @@ export default function TerminalPane({ processesRunning, theme }: Props) {
           ))}
           {!ports.length && <div className="ports-empty">No listening TCP ports detected.</div>}
         </div>
+      ) : activePanel === 'problems' ? (
+        <div className="problems-view">
+          {problems.map((problem, index) => (
+            <button key={`${problem.path}:${problem.line}:${index}`} onClick={() => onOpenSource(problem.path, problem.line, problem.column)}>
+              <span className={problem.severity}>{problem.severity === 'error' ? '×' : '!'}</span>
+              <strong>{problem.message}</strong>
+              <code>{problem.path}:{problem.line}:{problem.column}</code>
+            </button>
+          ))}
+          {!problems.length && <div className="ports-empty">No parsed workspace problems.</div>}
+        </div>
+      ) : (
+        <div className="output-view">
+          {outputLines.map((entry, index) => (
+            <code className={entry.stream} key={`${entry.processId}:${index}`}>
+              <span>{new Date(entry.time).toLocaleTimeString()}</span>
+              <b>{activePanel === 'debug' ? 'DEBUG' : entry.process}</b>
+              {entry.line}
+            </code>
+          ))}
+          {!outputLines.length && <div className="ports-empty">No {activePanel} output yet.</div>}
+        </div>
       )}
+      </div>
     </>
   )
 }

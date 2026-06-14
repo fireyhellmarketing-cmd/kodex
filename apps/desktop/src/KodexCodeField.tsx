@@ -15,11 +15,18 @@ type Glyph = {
   speed: number
   alpha: number
   phase: number
-  char: string
-  accent: boolean
+  token: string
+  kind: 'keyword' | 'command' | 'tool' | 'literal' | 'plain'
 }
 
-const glyphs = '{}[]()<>/\\|=+-_*.:;01abcdefletconstasyncawaitgitnpmtestreadeditplan'
+const codeTokens: Array<[string, Glyph['kind']]> = [
+  ['import', 'keyword'], ['const', 'keyword'], ['async', 'keyword'], ['await', 'keyword'],
+  ['return', 'keyword'], ['function', 'keyword'], ['git status', 'command'], ['git diff', 'command'],
+  ['npm test', 'command'], ['npm run build', 'command'], ['pytest -q', 'command'],
+  ['read_file()', 'tool'], ['apply_patch()', 'tool'], ['run_command()', 'tool'],
+  ['{ "status": "ok" }', 'literal'], ['Promise<Result>', 'literal'], ['=>', 'plain'],
+  ['try {', 'plain'], ['} catch (error) {', 'plain'], ['diagnostics.push(issue)', 'plain'],
+]
 
 export default function KodexCodeField({
   width = '100%',
@@ -61,18 +68,15 @@ export default function KodexCodeField({
       canvas.style.height = `${cssHeight}px`
       context.setTransform(ratio, 0, 0, ratio, 0, 0)
 
-      const count = Math.min(
-        10_000,
-        Math.max(1_600, Math.floor(cssWidth * cssHeight * 0.017 * density)),
-      )
+      const count = Math.min(520, Math.max(90, Math.floor(cssWidth * cssHeight * 0.00042 * density)))
       points = Array.from({ length: count }, (_, index) => ({
         x: Math.random() * cssWidth,
         y: Math.random() * cssHeight,
-        speed: 1.5 + Math.random() * 7,
-        alpha: 0.035 + Math.random() * 0.22,
+        speed: 2 + Math.random() * 8,
+        alpha: 0.04 + Math.random() * 0.22,
         phase: Math.random() * Math.PI * 2,
-        char: glyphs[(index * 17 + Math.floor(Math.random() * glyphs.length)) % glyphs.length],
-        accent: index % 53 === 0,
+        token: codeTokens[index % codeTokens.length][0],
+        kind: codeTokens[index % codeTokens.length][1],
       }))
     }
 
@@ -87,7 +91,7 @@ export default function KodexCodeField({
       }
       lastTime = time
       context.clearRect(0, 0, cssWidth, cssHeight)
-      context.font = '7px "SF Mono", Menlo, monospace'
+      context.font = '8px "SF Mono", Menlo, monospace'
       context.textBaseline = 'middle'
       const centerX = cssWidth / 2
       const centerY = cssHeight / 2
@@ -110,10 +114,17 @@ export default function KodexCodeField({
           1,
           point.alpha * centerFade * pulse + pointerInfluence * 0.72,
         )
-        context.fillStyle = point.accent
-          ? provider === 'openai-codex' ? '#d9dddf' : '#e4e7e9'
-          : pointerInfluence > 0.08 ? '#d9dde0' : '#777d81'
-        context.fillText(point.char, point.x, point.y)
+        const syntaxColors: Record<Glyph['kind'], string> = {
+          keyword: '#b99bd5',
+          command: '#91c7a0',
+          tool: '#83b8d6',
+          literal: '#d0ad77',
+          plain: '#777d81',
+        }
+        context.fillStyle = pointerInfluence > 0.08
+          ? '#e0e5e8'
+          : point.kind === 'plain' && provider === 'openai-codex' ? '#8b9297' : syntaxColors[point.kind]
+        context.fillText(point.token, point.x, point.y)
       }
 
       if (interactive && pointerActive) {

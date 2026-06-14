@@ -310,9 +310,8 @@ function buildApplicationMenu() {
 function readProviderApiKey() {
   try {
     const encrypted = fs.readFileSync(credentialPath())
-    return safeStorage.isEncryptionAvailable()
-      ? safeStorage.decryptString(encrypted)
-      : encrypted.toString('utf8')
+    if (!safeStorage.isEncryptionAvailable()) return ''
+    return safeStorage.decryptString(encrypted)
   } catch {
     return ''
   }
@@ -324,9 +323,10 @@ function writeProviderApiKey(apiKey) {
     fs.rmSync(credentialPath(), { force: true })
     return
   }
-  const payload = safeStorage.isEncryptionAvailable()
-    ? safeStorage.encryptString(apiKey)
-    : Buffer.from(apiKey, 'utf8')
+  if (!safeStorage.isEncryptionAvailable()) {
+    throw new Error('Secure credential storage is unavailable; the API key was not saved')
+  }
+  const payload = safeStorage.encryptString(apiKey)
   fs.writeFileSync(credentialPath(), payload, { mode: 0o600 })
 }
 
@@ -422,6 +422,9 @@ function startCore(workspace = activeCoreWorkspace()) {
       CODEX_CORE_TOKEN: coreToken,
       CODEX_SESSION_ID: crypto.randomBytes(8).toString('hex'),
       CODEX_PARENT_PID: String(process.pid),
+      CODEX_DESKTOP_PID: String(process.pid),
+      CODEX_DISABLE_DOCS: app.isPackaged ? '1' : '0',
+      CODEX_RENDERER_ORIGINS: `http://127.0.0.1:${rendererPort},http://localhost:${rendererPort}`,
       CODEX_LIFECYCLE_FILE: lifecyclePath(),
       CODEX_CLI_PATH: codexExecutable(),
       CODEX_OPENAI_API_KEY: readProviderApiKey(),
@@ -518,6 +521,12 @@ function killTerminal(id) {
   return terminalManager.kill(id)
 }
 
+function assertTrustedSender(event) {
+  if (!mainWindow || event.sender !== mainWindow.webContents) {
+    throw new Error('Blocked IPC request from an untrusted renderer')
+  }
+}
+
 function stopAllTerminals() {
   terminalManager.stopAll()
 }
@@ -582,6 +591,7 @@ function coreDiagnostics() {
 
 function registerWorkspaceIpc() {
   ipcMain.on('core:connection-sync', (event) => {
+    assertTrustedSender(event)
     event.returnValue = { baseUrl: `http://127.0.0.1:${corePort}`, token: coreToken }
   })
   ipcMain.handle('workspace:current', () => currentWorkspace ? workspaceSummary(currentWorkspace) : null)
@@ -633,8 +643,12 @@ function registerWorkspaceIpc() {
   ipcMain.handle('core:restart', restartCore)
   ipcMain.handle('core:diagnostics', coreDiagnostics)
   ipcMain.handle('settings:get', () => desktopSettings)
-  ipcMain.handle('settings:update', (_event, settings) => writeDesktopSettings(settings))
-  ipcMain.handle('credentials:set-provider-key', (_event, apiKey) => {
+  ipcMain.handle('settings:update', (event, settings) => {
+    assertTrustedSender(event)
+    return writeDesktopSettings(settings)
+  })
+  ipcMain.handle('credentials:set-provider-key', (event, apiKey) => {
+    assertTrustedSender(event)
     writeProviderApiKey(typeof apiKey === 'string' ? apiKey : '')
     return { configured: Boolean(apiKey) }
   })
@@ -644,7 +658,8 @@ function registerWorkspaceIpc() {
   ipcMain.handle('claude:login', () => runClaudeAccountCommand(['auth', 'login']))
   ipcMain.handle('claude:logout', () => runClaudeAccountCommand(['auth', 'logout']))
   ipcMain.handle('plugins:list', () => listKodexPlugins())
-  ipcMain.handle('plugins:install', async (_event, pluginId) => {
+  ipcMain.handle('plugins:install', async (event, pluginId) => {
+    assertTrustedSender(event)
     if (pluginId === 'openai-codex-kodex') {
       await runCodexAccountCommand(['plugin', 'add', 'openai-codex-kodex@personal'])
     } else if (pluginId === 'anthropic-claude-code') {
@@ -658,14 +673,16 @@ function registerWorkspaceIpc() {
     }
     return (await listKodexPlugins()).find((plugin) => plugin.id === pluginId)
   })
-  ipcMain.handle('plugins:set-enabled', async (_event, pluginId, enabled) => {
+  ipcMain.handle('plugins:set-enabled', async (event, pluginId, enabled) => {
+    assertTrustedSender(event)
     const plugin = (await listKodexPlugins()).find((item) => item.id === pluginId)
     if (!plugin || !plugin.installed) throw new Error('Install the plugin before enabling it')
     const pluginStates = { ...(desktopSettings.pluginStates || {}), [pluginId]: Boolean(enabled) }
     writeDesktopSettings({ pluginStates })
     return (await listKodexPlugins()).find((item) => item.id === pluginId)
   })
-  ipcMain.handle('plugins:uninstall', async (_event, pluginId) => {
+  ipcMain.handle('plugins:uninstall', async (event, pluginId) => {
+    assertTrustedSender(event)
     if (pluginId === 'openai-codex-kodex') {
       try { await runCodexAccountCommand(['plugin', 'remove', 'openai-codex-kodex@personal']) } catch {
         await runCodexAccountCommand(['plugin', 'disable', 'openai-codex-kodex@personal']).catch(() => undefined)
@@ -677,9 +694,13 @@ function registerWorkspaceIpc() {
     writeDesktopSettings({ pluginStates })
     return { id: pluginId, deleted: true }
   })
-  ipcMain.handle('desktop:open-external', (_event, url) => {
+  ipcMain.handle('desktop:open-external', (event, url) => {
+    assertTrustedSender(event)
     const target = new URL(String(url))
     if (!['http:', 'https:'].includes(target.protocol)) throw new Error('Unsupported external URL')
+    if (target.protocol === 'http:' && !['127.0.0.1', 'localhost', '::1'].includes(target.hostname)) {
+      throw new Error('Unencrypted external URLs are blocked')
+    }
     return shell.openExternal(target.toString())
   })
   ipcMain.handle('update:check', () => {
@@ -691,10 +712,30 @@ function registerWorkspaceIpc() {
   ipcMain.handle('update:download', () => autoUpdater.downloadUpdate())
   ipcMain.handle('update:install', () => autoUpdater.quitAndInstall())
   ipcMain.handle('terminal:list', () => terminalManager.list())
-  ipcMain.handle('terminal:create', (_event, options) => createTerminal(options))
-  ipcMain.handle('terminal:write', (_event, id, data) => terminalManager.write(id, data))
-  ipcMain.handle('terminal:resize', (_event, id, cols, rows) => terminalManager.resize(id, cols, rows))
-  ipcMain.handle('terminal:kill', (_event, id) => killTerminal(id))
+  ipcMain.handle('terminal:create', (event, options) => {
+    assertTrustedSender(event)
+    return createTerminal(options)
+  })
+  ipcMain.handle('terminal:rename', (event, id, name) => {
+    assertTrustedSender(event)
+    return terminalManager.rename(id, name)
+  })
+  ipcMain.handle('terminal:duplicate', (event, id) => {
+    assertTrustedSender(event)
+    return terminalManager.duplicate(id)
+  })
+  ipcMain.handle('terminal:write', (event, id, data) => {
+    assertTrustedSender(event)
+    return terminalManager.write(id, data)
+  })
+  ipcMain.handle('terminal:resize', (event, id, cols, rows) => {
+    assertTrustedSender(event)
+    return terminalManager.resize(id, cols, rows)
+  })
+  ipcMain.handle('terminal:kill', (event, id) => {
+    assertTrustedSender(event)
+    return killTerminal(id)
+  })
 }
 
 async function createWindow() {
@@ -710,6 +751,7 @@ async function createWindow() {
     show: true,
     backgroundColor: '#050814',
     webPreferences: {
+      sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
       preload: path.join(__dirname, 'preload.cjs')
@@ -717,6 +759,17 @@ async function createWindow() {
   })
   mainWindow.on('closed', () => {
     mainWindow = null
+  })
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    try {
+      const target = new URL(url)
+      if (target.protocol === 'https:') void shell.openExternal(target.toString())
+    } catch {}
+    return { action: 'deny' }
+  })
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    const current = mainWindow?.webContents.getURL()
+    if (!current || new URL(url).origin !== new URL(current).origin) event.preventDefault()
   })
   if (app.isPackaged) {
     await mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'))

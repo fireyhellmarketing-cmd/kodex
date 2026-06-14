@@ -34,6 +34,7 @@ from .project_intelligence import (
     update_project_state,
 )
 from .platform_services import PlatformServices
+from .telemetry import SystemTelemetry
 from .excellence import (
     compare_trajectories,
     read_workspace_session,
@@ -48,12 +49,23 @@ DEFAULT_DB_PATH = Path(os.environ.get("CODEX_CORE_DB", Path.home() / ".codex" / 
 DEFAULT_WORKSPACE = Path(os.environ.get("CODEX_WORKSPACE", Path.cwd()))
 CORE_AUTH_TOKEN = os.environ.get("CODEX_CORE_TOKEN", "")
 CORE_SESSION_ID = os.environ.get("CODEX_SESSION_ID", secrets.token_hex(8))
+DISABLE_PUBLIC_DOCS = os.environ.get("CODEX_DISABLE_DOCS", "0") == "1"
+ALLOWED_RENDERER_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get(
+        "CODEX_RENDERER_ORIGINS",
+        "http://127.0.0.1:5173,http://localhost:5173",
+    ).split(",")
+    if origin.strip()
+]
 LOG_LIMIT = 2_000
 EVENT_LIMIT = 2_000
 
 app = FastAPI(
     title="Kodex Core",
     version=APP_VERSION,
+    docs_url=None if DISABLE_PUBLIC_DOCS else "/docs",
+    openapi_url=None if DISABLE_PUBLIC_DOCS else "/openapi.json",
     openapi_tags=[
         {"name": "system", "description": "Core lifecycle, contracts, and diagnostics"},
         {"name": "workspace", "description": "Workspace-safe file operations"},
@@ -61,8 +73,8 @@ app = FastAPI(
 )
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=ALLOWED_RENDERER_ORIGINS,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -109,11 +121,10 @@ def supplied_token(request: Request) -> str:
 @app.middleware("http")
 async def authenticated_local_session(request: Request, call_next: Any) -> Any:
     started = time.perf_counter()
-    public = request.method == "OPTIONS" or request.url.path in {
-        "/v1/health",
-        "/docs",
-        "/openapi.json",
-    }
+    public_paths = {"/v1/health"}
+    if not DISABLE_PUBLIC_DOCS:
+        public_paths.update({"/docs", "/openapi.json"})
+    public = request.method == "OPTIONS" or request.url.path in public_paths
     if CORE_AUTH_TOKEN and not public and not secrets.compare_digest(
         supplied_token(request), CORE_AUTH_TOKEN
     ):
@@ -1071,6 +1082,10 @@ agent_runtime = AgentRuntime(
     create_workspace_snapshot,
 )
 platform_services = PlatformServices(DEFAULT_WORKSPACE, db_path, emit_event)
+system_telemetry = SystemTelemetry(
+    DEFAULT_WORKSPACE,
+    int(os.environ["CODEX_DESKTOP_PID"]) if os.environ.get("CODEX_DESKTOP_PID", "").isdigit() else None,
+)
 
 
 def add_process_log(proc_id: int, stream: str, line: str) -> None:
@@ -1782,6 +1797,11 @@ def git_action(action: str, payload: GitActionRequest) -> dict[str, Any]:
 @app.get("/v1/hardware")
 def hardware_info() -> dict[str, Any]:
     return platform_services.hardware()
+
+
+@app.get("/v1/system/metrics")
+def system_metrics() -> dict[str, Any]:
+    return system_telemetry.sample()
 
 
 @app.get("/v1/model-advisor")

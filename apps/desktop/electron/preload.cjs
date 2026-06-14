@@ -41,6 +41,8 @@ contextBridge.exposeInMainWorld('codex', {
   },
   listTerminals: () => ipcRenderer.invoke('terminal:list'),
   createTerminal: (options) => ipcRenderer.invoke('terminal:create', options),
+  renameTerminal: (id, name) => ipcRenderer.invoke('terminal:rename', id, name),
+  duplicateTerminal: (id) => ipcRenderer.invoke('terminal:duplicate', id),
   writeTerminal: (id, data) => ipcRenderer.invoke('terminal:write', id, data),
   resizeTerminal: (id, cols, rows) => ipcRenderer.invoke('terminal:resize', id, cols, rows),
   killTerminal: (id) => ipcRenderer.invoke('terminal:kill', id),

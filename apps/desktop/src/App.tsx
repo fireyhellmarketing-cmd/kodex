@@ -1,10 +1,11 @@
 import { type CSSProperties, FormEvent, type ReactNode, useEffect, useRef, useState } from 'react'
 import Editor, { type Monaco, type OnMount } from '@monaco-editor/react'
-import TerminalPane from './TerminalPane'
+import TerminalPane, { type BottomPanelId, type TerminalLaunchRequest } from './TerminalPane'
 import KodexCodeField from './KodexCodeField'
 import { type PluginAppearance } from './PluginAgentSurface'
 import ProviderBrandMark from './ProviderBrandMark'
 import WelcomeScreen from './WelcomeScreen'
+import KodexSystemIsland from './telemetry/KodexSystemIsland'
 
 type Health = { status: string; service: string; version: string }
 type Memory = { id: number; kind: string; title: string; content: string; created_at: string }
@@ -347,6 +348,11 @@ type LayoutSettings = {
   sidebar: number
   agent: number
   bottom: number
+  sidebarOpen: boolean
+  agentOpen: boolean
+  bottomCollapsed: boolean
+  bottomMaximized: boolean
+  bottomPanel: BottomPanelId
 }
 
 const terminalStatuses = new Set(['completed', 'failed', 'cancelled', 'rejected', 'needs_review', 'interrupted'])
@@ -810,7 +816,7 @@ function App() {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
   const [commandQuery, setCommandQuery] = useState('')
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [settingsSection, setSettingsSection] = useState<'general' | 'appearance' | 'models' | 'agent' | 'studio' | 'project' | 'advisor' | 'integrations' | 'security' | 'diagnostics' | 'about'>('general')
+  const [settingsSection, setSettingsSection] = useState<'general' | 'appearance' | 'terminal' | 'run-debug' | 'models' | 'agent' | 'studio' | 'project' | 'advisor' | 'integrations' | 'security' | 'diagnostics' | 'about'>('general')
   const [diagnostics, setDiagnostics] = useState<CoreDiagnostics | null>(null)
   const [projectIntelligence, setProjectIntelligence] = useState<ProjectIntelligence | null>(null)
   const [evaluationReport, setEvaluationReport] = useState<EvaluationReport | null>(null)
@@ -874,7 +880,7 @@ function App() {
     if (themeMigrationPendingRef.current && (!saved || saved === 'black')) return 'vscode'
     return themes.some((item) => item.id === saved) ? saved! : 'vscode'
   })
-  const [terminalOpen, setTerminalOpen] = useState(false)
+  const [terminalLaunch, setTerminalLaunch] = useState<TerminalLaunchRequest | null>(null)
   const [bootVisible, setBootVisible] = useState(true)
   const [stopPending, setStopPending] = useState(false)
   const [onboardingOpen, setOnboardingOpen] = useState(
@@ -886,10 +892,24 @@ function App() {
         sidebar: 248,
         agent: 390,
         bottom: 250,
+        sidebarOpen: true,
+        agentOpen: true,
+        bottomCollapsed: true,
+        bottomMaximized: false,
+        bottomPanel: 'terminal',
         ...JSON.parse(localStorage.getItem('codex.layout') ?? '{}'),
       }
     } catch {
-      return { sidebar: 248, agent: 390, bottom: 250 }
+      return {
+        sidebar: 248,
+        agent: 390,
+        bottom: 250,
+        sidebarOpen: true,
+        agentOpen: true,
+        bottomCollapsed: true,
+        bottomMaximized: false,
+        bottomPanel: 'terminal',
+      }
     }
   })
   const [error, setError] = useState<string | null>(null)
@@ -942,9 +962,9 @@ function App() {
       .filter(Boolean),
   ])
   const ideStyle = {
-    '--sidebar-width': `${layout.sidebar}px`,
-    '--agent-width': `${layout.agent}px`,
-    '--bottom-height': `${layout.bottom}px`,
+    '--sidebar-width': `${layout.sidebarOpen ? layout.sidebar : 0}px`,
+    '--agent-width': `${layout.agentOpen ? layout.agent : 0}px`,
+    '--bottom-height': `${layout.bottomCollapsed ? 34 : layout.bottom}px`,
   } as CSSProperties
 
   function persistLayout(next: LayoutSettings) {
@@ -980,7 +1000,7 @@ function App() {
     }
   }
 
-  function resizePanel(kind: keyof LayoutSettings, event: React.PointerEvent) {
+  function resizePanel(kind: 'sidebar' | 'agent' | 'bottom', event: React.PointerEvent) {
     event.preventDefault()
     const startX = event.clientX
     const startY = event.clientY
@@ -1581,6 +1601,15 @@ function App() {
     setActiveFile(entry.path)
   }
 
+  async function openSourceLocation(path: string, line: number, column: number) {
+    await openEntry({ name: path.split('/').at(-1) || path, kind: 'file', path })
+    window.setTimeout(() => {
+      editorRef.current?.revealPositionInCenter({ lineNumber: line, column })
+      editorRef.current?.setPosition({ lineNumber: line, column })
+      editorRef.current?.focus()
+    }, 0)
+  }
+
   function highlightAgentEdit(edit: ActiveAgentEdit) {
     const editor = editorRef.current
     if (!editor) return
@@ -1878,18 +1907,21 @@ function App() {
     setProcesses(await request<ProcessRecord[]>('/v1/processes'))
   }
 
-  async function runCommand(command: string, name = 'terminal', cwd = '.') {
+  async function runCommand(command: string, name = 'terminal', cwd = '.', mode: 'run' | 'debug' = 'run') {
     if (!command.trim()) return
-    await request('/v1/run', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name,
-        command: ['bash', '-lc', command],
-        cwd,
-      }),
+    persistLayout({
+      ...layout,
+      bottomCollapsed: false,
+      bottomMaximized: false,
+      bottomPanel: 'terminal',
     })
-    await refreshProcesses()
+    setTerminalLaunch({
+      key: Date.now(),
+      name,
+      command,
+      cwd,
+      mode,
+    })
   }
 
   async function runProject(mode: 'run' | 'debug') {
@@ -1901,7 +1933,7 @@ function App() {
     const fallback = mode === 'run'
       ? 'npm run start'
       : 'npm run dev'
-    await runCommand(preferred?.command ?? fallback, preferred?.name ?? mode, preferred?.cwd ?? '.')
+    await runCommand(preferred?.command ?? fallback, preferred?.name ?? mode, preferred?.cwd ?? '.', mode)
   }
 
   async function stopProcess(id: number) {
@@ -2309,8 +2341,13 @@ function App() {
         setCommandPaletteOpen(true)
       } else if (command === 'show-explorer') {
         setActivePanel('explorer')
+        persistLayout({ ...layout, sidebarOpen: true })
       } else if (command === 'toggle-terminal' || command === 'new-terminal') {
-        setTerminalOpen(true)
+        persistLayout({
+          ...layout,
+          bottomCollapsed: command === 'new-terminal' ? false : !layout.bottomCollapsed,
+          bottomPanel: 'terminal',
+        })
       } else if (command === 'run') {
         void runProject('run')
       } else if (command === 'debug') {
@@ -2321,7 +2358,7 @@ function App() {
       }
     })
     return dispose
-  }, [selectedFile, runProfiles])
+  }, [selectedFile, runProfiles, layout])
 
   if (!workspace) {
     return (
@@ -2352,8 +2389,14 @@ function App() {
   const commands = [
     { label: 'Files: New Coding Workspace', detail: 'Open an empty folder for a new project', run: createCodingWorkspace },
     { label: 'Files: Open Folder', detail: 'Choose a workspace', run: openWorkspace },
-    { label: 'View: Explorer', detail: 'Show workspace files', run: () => setActivePanel('explorer') },
-    { label: 'View: Search', detail: 'Search files and symbols', run: () => setActivePanel('search') },
+    { label: 'View: Toggle Primary Sidebar', detail: 'Show or hide the active sidebar', run: () => persistLayout({ ...layout, sidebarOpen: !layout.sidebarOpen }) },
+    { label: 'View: Toggle Kodex Agent', detail: 'Show or hide the AI panel', run: () => persistLayout({ ...layout, agentOpen: !layout.agentOpen }) },
+    { label: 'View: Toggle Bottom Panel', detail: 'Expand or collapse the panel strip', run: () => persistLayout({ ...layout, bottomCollapsed: !layout.bottomCollapsed, bottomMaximized: false }) },
+    { label: 'View: Focus Terminal', detail: 'Open and focus the workspace terminal', run: () => persistLayout({ ...layout, bottomPanel: 'terminal', bottomCollapsed: false }) },
+    { label: 'View: Maximize Bottom Panel', detail: 'Use the editor area for the active panel', run: () => persistLayout({ ...layout, bottomCollapsed: false, bottomMaximized: !layout.bottomMaximized }) },
+    { label: 'View: Reset Layout', detail: 'Restore the default workbench arrangement', run: () => persistLayout({ sidebar: 248, agent: 390, bottom: 250, sidebarOpen: true, agentOpen: true, bottomCollapsed: true, bottomMaximized: false, bottomPanel: 'terminal' }) },
+    { label: 'View: Explorer', detail: 'Show workspace files', run: () => { setActivePanel('explorer'); persistLayout({ ...layout, sidebarOpen: true }) } },
+    { label: 'View: Search', detail: 'Search files and symbols', run: () => { setActivePanel('search'); persistLayout({ ...layout, sidebarOpen: true }) } },
     { label: 'View: Outline', detail: 'Show symbols in the active file', run: () => setActivePanel('outline') },
     { label: 'View: Timeline', detail: 'Show agent work and workspace snapshots', run: () => setActivePanel('history') },
     { label: 'View: Run and Debug', detail: 'Show process controls', run: () => setActivePanel('run') },
@@ -2762,24 +2805,36 @@ function App() {
           <kbd>⌘ K</kbd>
         </button>
         <div className="titlebar-tools">
-          <button className="status-island" onClick={() => chatInputRef.current?.focus()}>
-            <span className={`status-island-dot ${agentActive ? 'working' : ''}`} />
-            <span><strong>Kodex Agent</strong><small>{agentActive ? 'Working' : 'Ready'}</small></span>
-            <i aria-hidden="true"><b /><b /><b /><b /><b /></i>
-          </button>
+          <KodexSystemIsland
+            agentActive={agentActive}
+            provider={selectedModel === 'auto' ? 'Kodex Auto' : selectedModel.split(':', 1)[0]}
+            model={selectedModelLabel}
+            terminalActive={!layout.bottomCollapsed}
+            onFocusAgent={() => {
+              persistLayout({ ...layout, agentOpen: true })
+              window.setTimeout(() => chatInputRef.current?.focus(), 0)
+            }}
+          />
           <div className="window-actions"><span>＋</span><span>−</span><span>□</span><span>×</span></div>
         </div>
       </header>
 
-      <div className="workbench">
+      <div className={`workbench ${layout.sidebarOpen ? '' : 'sidebar-closed'} ${layout.agentOpen ? '' : 'agent-closed'}`}>
         <nav className="activity-bar">
           <div className="activity-top">
             {primaryPanels.map((panel) => (
               <button
                 key={panel}
                 title={panelLabels[panel]}
-                className={activePanel === panel ? 'active' : ''}
-                onClick={() => setActivePanel(panel)}
+                className={activePanel === panel && layout.sidebarOpen ? 'active' : ''}
+                onClick={() => {
+                  if (activePanel === panel && layout.sidebarOpen) {
+                    persistLayout({ ...layout, sidebarOpen: false })
+                  } else {
+                    setActivePanel(panel)
+                    persistLayout({ ...layout, sidebarOpen: true })
+                  }
+                }}
               >
                 <Icon name={icons[panel]} />
                 {panel === 'tasks' && tasks.length > 0 && <b>{tasks.length}</b>}
@@ -2793,11 +2848,11 @@ function App() {
           </div>
         </nav>
 
-        <aside className="side-panel">{renderSidePanel()}</aside>
-        <div className="resize-handle resize-sidebar" onPointerDown={(event) => resizePanel('sidebar', event)} />
+        <aside className={`side-panel ${layout.sidebarOpen ? '' : 'panel-closed'}`}>{renderSidePanel()}</aside>
+        {layout.sidebarOpen && <div className="resize-handle resize-sidebar" onPointerDown={(event) => resizePanel('sidebar', event)} />}
 
-        <section className={`center-stack ${terminalOpen ? 'terminal-visible' : 'terminal-hidden'}`}>
-          <div className="editor-area">
+        <section className={`center-stack terminal-visible ${layout.bottomCollapsed ? 'bottom-collapsed' : ''} ${layout.bottomMaximized ? 'bottom-maximized' : ''}`}>
+          <div className={`editor-area ${layout.bottomMaximized ? 'panel-closed' : ''}`}>
             <div className="tabbar">
               {openFiles.map((file) => (
                 <button
@@ -2816,7 +2871,12 @@ function App() {
               <div className="editor-actions">
                 <button onClick={() => runProject('run')} title="Run"><Icon name="run" /></button>
                 <button onClick={() => runProject('debug')} title="Debug"><Icon name="sparkles" /></button>
-                <button onClick={() => setTerminalOpen((open) => !open)} title="Toggle terminal"><Icon name="terminal" /></button>
+                <button
+                  onClick={() => persistLayout({ ...layout, bottomCollapsed: !layout.bottomCollapsed, bottomPanel: 'terminal' })}
+                  title="Toggle terminal"
+                >
+                  <Icon name="terminal" />
+                </button>
                 <button onClick={saveActiveFile} title="Save"><Icon name="check" /></button>
               </div>
             </div>
@@ -2839,8 +2899,10 @@ function App() {
                     {([
                       ['general', 'General', 'Core lifecycle'],
                       ['appearance', 'Appearance', 'Themes and motion'],
-                      ['models', 'Models', 'Providers and routing'],
-                      ['agent', 'Agent', 'Execution behavior'],
+                      ['terminal', 'Terminal', 'Shell and sessions'],
+                      ['run-debug', 'Run and Debug', 'Profiles and output'],
+                      ['models', 'Models & Subscriptions', 'Providers and routing'],
+                      ['agent', 'Kodex Agent', 'Execution behavior'],
                       ['studio', 'Agent Studio', 'Prompts and versions'],
                       ['project', 'Project', 'Intelligence and skills'],
                       ['advisor', 'Model Advisor', 'Hardware matching'],
@@ -2921,12 +2983,46 @@ function App() {
                         </div>
                       </section>
                     )}
+                    {settingsSection === 'terminal' && (
+                      <section>
+                        <div className="settings-section-heading">
+                          <span>Workspace shell</span>
+                          <h2>Terminal</h2>
+                          <p>Real workspace PTY sessions remain alive while the bottom panel is collapsed.</p>
+                        </div>
+                        <div className="settings-card agent-policy-list">
+                          <div><span>Default shell</span><b>System login shell</b></div>
+                          <div><span>Font</span><b>SF Mono / Menlo · 12px</b></div>
+                          <div><span>Scrollback</span><b>5,000 lines</b></div>
+                          <div><span>Default location</span><b>Active workspace</b></div>
+                          <div><span>Session restore</span><b>Enabled while Kodex runs</b></div>
+                        </div>
+                        <div className="settings-actions">
+                          <button onClick={() => persistLayout({ ...layout, bottomCollapsed: false, bottomPanel: 'terminal' })}>Open Terminal</button>
+                        </div>
+                      </section>
+                    )}
+                    {settingsSection === 'run-debug' && (
+                      <section>
+                        <div className="settings-section-heading">
+                          <span>Visible execution</span>
+                          <h2>Run and Debug</h2>
+                          <p>Each launch opens a named terminal with its command, working directory, live output, and exit result.</p>
+                        </div>
+                        <div className="settings-card agent-policy-list">
+                          <div><span>Detected profiles</span><b>{runProfiles.length}</b></div>
+                          <div><span>Run output</span><b>Dedicated PTY</b></div>
+                          <div><span>Debug output</span><b>Terminal + Debug Console</b></div>
+                          <div><span>Errors</span><b>Problems source links</b></div>
+                        </div>
+                      </section>
+                    )}
                     {settingsSection === 'models' && (
                       <section>
                         <div className="settings-section-heading">
                           <span>Model gateway</span>
-                          <h2>Providers and routing</h2>
-                          <p>Local models are preferred. Cloud providers activate only when configured.</p>
+                          <h2>Models and subscriptions</h2>
+                          <p>ChatGPT Codex and Claude use their official login flows. Ollama and LM Studio remain local; Kodex never handles subscription payments or provider passwords.</p>
                         </div>
                         <div className="provider-list">
                           {providers.map((provider) => (
@@ -3412,16 +3508,36 @@ function App() {
             )}
           </div>
 
-          {terminalOpen && (
-            <section className="bottom-panel">
+          <section className="bottom-panel">
+            {!layout.bottomCollapsed && !layout.bottomMaximized && (
               <div className="resize-handle resize-bottom" onPointerDown={(event) => resizePanel('bottom', event)} />
-              <TerminalPane processesRunning={running.length} theme={theme} />
-            </section>
-          )}
+            )}
+            <TerminalPane
+              processesRunning={running.length}
+              theme={theme}
+              collapsed={layout.bottomCollapsed}
+              maximized={layout.bottomMaximized}
+              activePanel={layout.bottomPanel}
+              launchRequest={terminalLaunch}
+              processLogs={processes}
+              onPanelChange={(bottomPanel) => persistLayout({ ...layout, bottomPanel, bottomCollapsed: false })}
+              onToggleCollapsed={() => persistLayout({
+                ...layout,
+                bottomCollapsed: !layout.bottomCollapsed,
+                bottomMaximized: false,
+              })}
+              onToggleMaximized={() => persistLayout({
+                ...layout,
+                bottomCollapsed: false,
+                bottomMaximized: !layout.bottomMaximized,
+              })}
+              onOpenSource={(path, line, column) => void openSourceLocation(path, line, column)}
+            />
+          </section>
         </section>
 
-        <div className="resize-handle resize-agent" onPointerDown={(event) => resizePanel('agent', event)} />
-        <aside className={`agent-panel ${layout.agent <= 320 ? 'narrow' : ''}`}>
+        {layout.agentOpen && <div className="resize-handle resize-agent" onPointerDown={(event) => resizePanel('agent', event)} />}
+        <aside className={`agent-panel ${layout.agent <= 320 ? 'narrow' : ''} ${layout.agentOpen ? '' : 'panel-closed'}`}>
           <div className="agent-header">
             <div className="agent-provider-tabs">
               <button className={agentTab === 'kodex' ? 'active' : ''} onClick={() => setAgentTab('kodex')}>
@@ -3510,6 +3626,7 @@ function App() {
                 )}
               </div>
               <button title="New clean session" onClick={() => void startFreshSession()}><Icon name="plus" /></button>
+              <button title="Close Kodex Agent" onClick={() => persistLayout({ ...layout, agentOpen: false })}>×</button>
             </div>
           </div>
           <div className={`chat-scroll ${!messages.length && !currentRun ? 'empty' : ''}`}>

@@ -41,6 +41,14 @@ function shellArguments(shell, platform = process.platform) {
   return name === 'zsh' || name === 'bash' || name === 'sh' ? ['-l'] : []
 }
 
+function commandArguments(shell, command, platform = process.platform) {
+  if (platform === 'win32') {
+    const name = path.basename(shell).toLowerCase()
+    return name.includes('powershell') ? ['-NoLogo', '-Command', command] : ['/d', '/s', '/c', command]
+  }
+  return ['-lc', command]
+}
+
 function resolveTerminalCwd(workspace, requested) {
   if (!workspace) {
     throw terminalError('workspace_required', 'Open a workspace before starting a terminal.')
@@ -85,6 +93,7 @@ class TerminalManager {
       exitCode: record.exitCode,
       signal: record.signal,
       error: record.error,
+      command: record.command,
       createdAt: record.createdAt
     }
   }
@@ -113,11 +122,15 @@ class TerminalManager {
       exitCode: null,
       signal: null,
       error: '',
+      command: '',
+      startedAt: Date.now(),
       createdAt: new Date().toISOString()
     }
     this.terminals.set(id, record)
     try {
-      record.process = this.pty.spawn(shell, shellArguments(shell), {
+      const command = typeof options.command === 'string' ? options.command.trim() : ''
+      record.command = command
+      record.process = this.pty.spawn(shell, command ? commandArguments(shell, command) : shellArguments(shell), {
         name: 'xterm-256color',
         cols,
         rows,
@@ -125,6 +138,10 @@ class TerminalManager {
         env: { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor' }
       })
       record.status = 'running'
+      if (command) {
+        record.sequence += 1
+        record.output = `\u001b[90m${record.cwd}\u001b[0m\r\n\u001b[36m$ ${command}\u001b[0m\r\n`
+      }
       record.process.onData((data) => {
         record.sequence += 1
         record.output = `${record.output}${data}`.slice(-this.bufferLimit)
@@ -134,7 +151,7 @@ class TerminalManager {
         record.status = 'exited'
         record.exitCode = exitCode
         record.signal = signal
-        this.emit('terminal:exit', { id, exitCode, signal })
+        this.emit('terminal:exit', { id, exitCode, signal, durationMs: Date.now() - record.startedAt })
       })
     } catch (error) {
       record.status = 'error'
@@ -142,6 +159,28 @@ class TerminalManager {
       this.emit('terminal:error', { id, code: 'spawn_failed', message: record.error })
     }
     return this.snapshot(record)
+  }
+
+  rename(id, name) {
+    const terminal = this.terminals.get(Number(id))
+    if (!terminal) throw terminalError('terminal_not_found', 'Terminal not found.')
+    const next = String(name || '').trim().slice(0, 80)
+    if (!next) throw terminalError('terminal_name_required', 'Enter a terminal name.')
+    terminal.name = next
+    return this.snapshot(terminal)
+  }
+
+  duplicate(id) {
+    const terminal = this.terminals.get(Number(id))
+    if (!terminal) throw terminalError('terminal_not_found', 'Terminal not found.')
+    return this.create({
+      name: `${terminal.name} copy`,
+      cwd: path.relative(this.workspace, terminal.cwd) || '.',
+      shell: terminal.shell,
+      command: terminal.command || undefined,
+      cols: terminal.cols,
+      rows: terminal.rows
+    })
   }
 
   requireRunning(id) {
@@ -194,6 +233,7 @@ class TerminalManager {
 
 module.exports = {
   TerminalManager,
+  commandArguments,
   resolveShell,
   resolveTerminalCwd,
   shellArguments

@@ -29,6 +29,7 @@ type CodexTerminal = {
   exitCode: number | null
   signal: number | null
   error: string
+  command: string
   createdAt: string
 }
 
@@ -93,7 +94,9 @@ interface Window {
     installUpdate: () => Promise<void>
     onUpdateStatus: (listener: (payload: { event: string; payload: unknown }) => void) => () => void
     listTerminals: () => Promise<CodexTerminal[]>
-    createTerminal: (options?: Partial<CodexTerminal> & { shell?: string }) => Promise<CodexTerminal>
+    createTerminal: (options?: Partial<CodexTerminal> & { shell?: string; command?: string }) => Promise<CodexTerminal>
+    renameTerminal: (id: number, name: string) => Promise<CodexTerminal>
+    duplicateTerminal: (id: number) => Promise<CodexTerminal>
     writeTerminal: (id: number, data: string) => Promise<void>
     resizeTerminal: (id: number, cols: number, rows: number) => Promise<CodexTerminal | null>
     killTerminal: (id: number) => Promise<CodexTerminal>

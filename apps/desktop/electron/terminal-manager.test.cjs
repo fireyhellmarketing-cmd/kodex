@@ -6,6 +6,7 @@ const test = require('node:test')
 
 const {
   TerminalManager,
+  commandArguments,
   resolveTerminalCwd,
   shellArguments
 } = require('./terminal-manager.cjs')
@@ -72,4 +73,15 @@ test('uses login arguments only for supported unix shells', () => {
   assert.deepEqual(shellArguments('/bin/zsh', 'darwin'), ['-l'])
   assert.deepEqual(shellArguments('/usr/local/bin/fish', 'darwin'), [])
   assert.deepEqual(shellArguments('powershell.exe', 'win32'), [])
+})
+
+test('launches commands through the selected shell and supports rename and duplicate', () => {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'kodex-terminal-'))
+  const pty = fakePty()
+  const manager = new TerminalManager({ pty, workspace, emit: () => {} })
+  const terminal = manager.create({ shell: '/bin/zsh', command: 'npm test', name: 'Run tests' })
+  assert.match(terminal.output, /npm test/)
+  assert.deepEqual(commandArguments('/bin/zsh', 'npm test', 'darwin'), ['-lc', 'npm test'])
+  assert.equal(manager.rename(terminal.id, 'Tests').name, 'Tests')
+  assert.equal(manager.duplicate(terminal.id).name, 'Tests copy')
 })
